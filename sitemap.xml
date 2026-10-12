@@ -1,1 +1,11 @@
-<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://sheepterm.com/</loc></url></urlset>
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://sheepterm.com/</loc></url>
+  <url><loc>https://sheepterm.com/apps/</loc></url>
+  <url><loc>https://sheepterm.com/sheeptext/</loc></url>
+  <url><loc>https://sheepterm.com/sheepdrop/</loc></url>
+  <url><loc>https://sheepterm.com/sheeptap/</loc></url>
+  <url><loc>https://sheepterm.com/sheepping/</loc></url>
+  <url><loc>https://sheepterm.com/labdc/</loc></url>
+  <url><loc>https://sheepterm.com/labdock/</loc></url>
+</urlset>

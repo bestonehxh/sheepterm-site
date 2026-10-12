@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SheepTerm share link</title>
+<style>body{font:16px system-ui;margin:0;display:grid;place-items:center;min-height:100vh;background:#1c1f26;color:#eee}
+main{max-width:30rem;padding:1.5rem}a.b{display:inline-block;margin:.5rem .5rem 0 0;padding:.6rem 1rem;border-radius:.5rem;background:#5aa5d6;color:#fff;text-decoration:none}
+code{word-break:break-all;color:#9ab}</style></head>
+<body><main>
+<h1>SheepTerm share link</h1>
+<p id="msg">Open this link in SheepTerm, signed in with the Google account it was shared with.</p>
+<a class="b" id="open" href="#">Open in SheepTerm</a>
+<p><small>The part after <code>#</code> never leaves your browser: it is not sent to this site or to anyone else.</small></p>
+</main>
+<script>
+// Hosted at https://sheepterm.com/share/ . Static: the fragment (v2.<fileId>.<key>) stays on the client.
+var f = location.hash.slice(1);
+var a = document.getElementById('open');
+if (/^v2\.[A-Za-z0-9_-]{10,128}\.[A-Za-z0-9_-]{43}$/.test(f)) { a.href = 'sheepterm://share#' + f; }
+else { a.style.display = 'none'; document.getElementById('msg').textContent = 'This is not a valid SheepTerm share link.'; }
+</script></body></html>
