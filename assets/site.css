@@ -291,3 +291,8 @@ img.art{display:block;width:100%;height:auto;border-radius:16px;border:1px solid
 .fgrid span{color:var(--dim2);font-size:14px;line-height:1.45}
 .winnote{margin:28px 0 0;color:var(--dim2);font-size:15px;text-align:center}
 @media(max-width:560px){.hero .sub{font-size:17px}.frow h3{font-size:25px}img.art{border-radius:10px}}
+.gallery{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));margin-top:80px}
+.gallery figure{margin:0}
+.gallery figcaption{display:flex;flex-direction:column;gap:2px;margin:12px 4px 0}
+.gallery figcaption b{font-size:16px}
+.gallery figcaption span{color:var(--dim2);font-size:14.5px}
