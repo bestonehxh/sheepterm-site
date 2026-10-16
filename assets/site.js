@@ -43,6 +43,8 @@ document.querySelectorAll("a[data-quick]").forEach(function(a){
   document.querySelectorAll("[data-quick-meta]").forEach(function(m){m.innerHTML="<b>"+r.v+"</b> · "+mb(r.size)+" · "+NM[os]})}).catch(function(){});
 });
 
+// version text: always the latest release (the static text is only the fallback)
+document.querySelectorAll("[data-ver]").forEach(function(e){release(e.dataset.ver).then(function(r){e.textContent=r.v}).catch(function(){})});
 // phone nav menu
 (function(){var n=document.querySelector(".nav"),b=n&&n.querySelector(".menu");if(!b)return;
  b.addEventListener("click",function(){var o=n.classList.toggle("open");b.setAttribute("aria-expanded",o?"true":"false")})})();
