@@ -11,11 +11,10 @@ var cache={};
 function release(repo){
  if(cache[repo])return cache[repo];
  return cache[repo]=new Promise(function(res,rej){
-  try{var c=sessionStorage.getItem("rel:"+repo);if(c)return res(JSON.parse(c))}catch(e){}
   fetch(API+repo+"/releases/latest",{headers:{Accept:"application/vnd.github+json"}}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
    var a=(j.assets||[]).filter(function(x){return/\.zip$/i.test(x.name)})[0];if(!a)throw 0;
    var o={v:human(j.tag_name),url:a.browser_download_url,size:a.size};
-   try{sessionStorage.setItem("rel:"+repo,JSON.stringify(o))}catch(e){}res(o)}).catch(rej)})}
+   res(o)}).catch(rej)})}
 var NM={mac:"macOS",win:"Windows"};
 // per-OS highlight inside each .dl group
 document.querySelectorAll(".dl").forEach(function(g){
