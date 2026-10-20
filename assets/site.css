@@ -296,3 +296,10 @@ img.art{display:block;width:100%;height:auto;border-radius:16px;border:1px solid
 .gallery figcaption{display:flex;flex-direction:column;gap:2px;margin:12px 4px 0}
 .gallery figcaption b{font-size:16px}
 .gallery figcaption span{color:var(--dim2);font-size:14.5px}
+
+/* Visible support action beside GitHub, including on mobile. */
+.nav-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}
+.nav .nav-actions .gh{margin-left:0}
+.nav .donate{display:inline-flex;align-items:center;justify-content:center;padding:7px 12px;border:1px solid #b75b86;border-radius:9px;background:#3b2334;color:#ffd4e7;font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s}
+.nav .donate:hover{background:#563047;border-color:#e58fb6}
+@media(max-width:400px){.nav .donate{padding:7px 9px}.nav-actions{gap:2px}}
