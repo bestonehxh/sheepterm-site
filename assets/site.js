@@ -12,10 +12,12 @@ function release(repo){
  if(cache[repo])return cache[repo];
  return cache[repo]=new Promise(function(res,rej){
   fetch(API+repo+"/releases/latest",{headers:{Accept:"application/vnd.github+json"}}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
-   var a=(j.assets||[]).filter(function(x){return/\.zip$/i.test(x.name)})[0];if(!a)throw 0;
-   var o={v:human(j.tag_name),url:a.browser_download_url,size:a.size};
-   res(o)}).catch(rej)})}
-var NM={mac:"macOS",win:"Windows"};
+   if(!(j.assets||[]).length)throw 0;
+   res({v:human(j.tag_name),assets:j.assets})}).catch(rej)})}
+// the asset a button means: its data-asset pattern (Linux: one tar.gz per architecture), else the release's zip
+function pick(r,pat){var re=new RegExp(pat||"\\.zip$","i"),a=r.assets.filter(function(x){return re.test(x.name)})[0];
+ if(!a)throw 0;return{v:r.v,url:a.browser_download_url,size:a.size}}
+var NM={mac:"macOS",win:"Windows",linux:"Linux"};
 // per-OS highlight inside each .dl group
 document.querySelectorAll(".dl").forEach(function(g){
  var b=g.querySelectorAll("a.btn[data-os]");if(!b.length)return;
@@ -25,19 +27,21 @@ document.querySelectorAll(".dl").forEach(function(g){
 });
 // buttons with a repo
 document.querySelectorAll("a[data-repo]").forEach(function(a){
- release(a.dataset.repo).then(function(r){
+ release(a.dataset.repo).then(function(rel){
+  var r=pick(rel,a.dataset.asset);
   a.href=r.url;
   var lbl=a.dataset.label||NM[a.dataset.os]||"";
   a.setAttribute("aria-label","Download "+(a.dataset.app||"")+" "+r.v+" for "+lbl+", "+mb(r.size));
-  document.querySelectorAll('[data-meta="'+a.dataset.repo+'"]').forEach(function(m){m.innerHTML=(m.dataset.pre||"")+"<b>"+r.v+"</b> · "+mb(r.size)+(m.dataset.sep?" · ":"")});
+  if(!a.dataset.nometa)document.querySelectorAll('[data-meta="'+a.dataset.repo+'"]').forEach(function(m){m.innerHTML=(m.dataset.pre||"")+"<b>"+r.v+"</b> · "+mb(r.size)+(m.dataset.sep?" · ":"")});
  }).catch(function(){});
 });
 // quick download: OS-aware single button
 document.querySelectorAll("a[data-quick]").forEach(function(a){
- var os=(ME==="win"&&a.dataset.win)?"win":"mac",repo=os==="win"?a.dataset.win:a.dataset.mac;
+ var os=(ME==="win"&&a.dataset.win)?"win":(ME==="linux"&&a.dataset.linux)?"linux":"mac";
+ var repo=os==="win"?a.dataset.win:os==="linux"?a.dataset.linux:a.dataset.mac;
  var t=a.querySelector(".t");if(t)t.textContent=(a.dataset.prefix||"Download")+" for "+NM[os];
  a.href=GH+repo+"/releases/latest";
- release(repo).then(function(r){a.href=r.url;
+ release(repo).then(function(rel){var r=pick(rel,os==="linux"?"linux-x86_64\\.tar\\.gz$":"");a.href=r.url;
   if(a.closest(".acard"))return;
   document.querySelectorAll("[data-quick-meta]").forEach(function(m){m.innerHTML="<b>"+r.v+"</b> · "+mb(r.size)+" · "+NM[os]})}).catch(function(){});
 });
