@@ -30,6 +30,7 @@ document.querySelectorAll("a[data-repo]").forEach(function(a){
  release(a.dataset.repo).then(function(rel){
   var r=pick(rel,a.dataset.asset);
   a.href=r.url;
+  var bv=a.querySelector(".bver");if(bv)bv.textContent=r.v+" · "+mb(r.size); // the version sits on its own button
   var lbl=a.dataset.label||NM[a.dataset.os]||"";
   a.setAttribute("aria-label","Download "+(a.dataset.app||"")+" "+r.v+" for "+lbl+", "+mb(r.size));
   if(!a.dataset.nometa)document.querySelectorAll('[data-meta="'+a.dataset.repo+'"]').forEach(function(m){m.innerHTML=(m.dataset.pre||"")+"<b>"+r.v+"</b> · "+mb(r.size)+(m.dataset.sep?" · ":"")});

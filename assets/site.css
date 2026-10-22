@@ -31,6 +31,8 @@ a.btn.mine:hover{background:#78b8e2;border-color:#78b8e2}
 .btn.off{color:var(--dim);border-style:dashed;background:transparent;font-weight:500;cursor:default}
 .btn.off small{font-size:12px;margin-left:4px}
 .btn.lg{padding:15px 26px;font-size:17px;border-radius:13px}
+.btn .blab{display:flex;flex-direction:column;align-items:flex-start;gap:3px;line-height:1.15}
+.btn .bver{font:500 12.5px "JetBrains Mono",ui-monospace,monospace;opacity:.75}
 .btn.ghost{background:transparent}
 .dl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .meta{font:400 12.5px "JetBrains Mono",ui-monospace,monospace;color:var(--dim2)}
@@ -193,7 +195,7 @@ svg.spark{display:block;width:100%;height:46px}
 .herologo{display:inline-block;position:relative}.herologo::before{content:"";position:absolute;inset:-30px;background:radial-gradient(closest-side,rgba(90,165,214,.35),transparent);filter:blur(12px)}.herologo img{position:relative;height:150px;width:auto;display:block;filter:drop-shadow(0 12px 24px rgba(0,0,0,.5))}
 footer img.flock{height:28px;width:auto;vertical-align:middle;margin-right:4px}
 
-@media(max-width:520px){.hero .dl .btn,.cta2 .dl .btn{white-space:normal;justify-content:center;width:100%}.hero .dl,.cta2 .dl{flex-direction:column;align-items:stretch}.hero .sub{font-size:17px}.hero .meta{overflow-wrap:anywhere}}
+@media(max-width:520px){.hero .dl .btn,.cta2 .dl .btn{white-space:normal;justify-content:center;width:100%}.hero .dl,.cta2 .dl{flex-direction:column;align-items:stretch}.hero .dl .blab,.cta2 .dl .blab{align-items:center}.hero .sub{font-size:17px}.hero .meta{overflow-wrap:anywhere}}
 img,svg,video{max-width:100%}
 @media(max-width:520px){.btn.lg{padding:14px 14px;font-size:16px;gap:8px}.btn .t{white-space:normal}}
 
