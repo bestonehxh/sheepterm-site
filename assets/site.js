@@ -14,8 +14,10 @@ function release(repo){
   fetch(API+repo+"/releases/latest",{headers:{Accept:"application/vnd.github+json"}}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
    if(!(j.assets||[]).length)throw 0;
    res({v:human(j.tag_name),assets:j.assets})}).catch(rej)})}
-// the asset a button means: its data-asset pattern (Linux: one tar.gz per architecture), else the release's zip
-function pick(r,pat){var re=new RegExp(pat||"\\.zip$","i"),a=r.assets.filter(function(x){return re.test(x.name)})[0];
+// the asset a button means: its data-asset pattern (Linux: one tar.gz per architecture), else the release's
+// disk image (Mac, drag-to-install: a zip unpacked twice became "App 2.app" beside the old copy), else its zip
+function pick(r,pat){var a=null;(pat?[pat]:["\\.dmg$","\\.zip$"]).some(function(p){var re=new RegExp(p,"i");
+ a=r.assets.filter(function(x){return re.test(x.name)})[0];return!!a});
  if(!a)throw 0;return{v:r.v,url:a.browser_download_url,size:a.size}}
 var NM={mac:"macOS",win:"Windows",linux:"Linux"};
 // per-OS highlight inside each .dl group
