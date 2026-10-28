@@ -18,7 +18,7 @@
 <ol class="x-steps">
 <li><b>Open the serial form</b>Choose <span class="x-menu">File &rsaquo; New Serial Console&hellip;</span>. (It has no keyboard shortcut.)</li>
 <li><b>Pick the device</b>The Device menu lists the <code>cu.*</code> names. If you plugged the cable in after opening the form, click the circular-arrow button beside it to rescan. Its tooltip reminds you to plug the console cable into a powered switch first.</li>
-<li><b>Choose the baud rate</b>The list is 9600, 19200, 38400, 57600, 115200 and 230400, and it starts at <b>9600</b>. Many switches and routers ship with a 9600 console, others use 115200; check the device&rsquo;s documentation. SheepTerm always uses 8 data bits, no parity, 1 stop bit and no flow control (8N1).</li>
+<li><b>Choose the baud rate</b>The list is 9600, 19200, 38400, 57600, 115200 and 230400, and it starts at <b>9600</b> (115200 for an Aruba CX USB-C console port). Many switches and routers ship with a 9600 console, others use 115200; check the device&rsquo;s documentation. SheepTerm always uses 8 data bits, no parity, 1 stop bit and no flow control (8N1).</li>
 <li><b>Set the device family (optional)</b>Pick the vendor so highlighting matches, or leave it on Auto. See the <a href="/guides/vendor-highlighting/">highlighting guide</a>.</li>
 <li><b>Click Connect</b>The tab opens and the session info shows the port and speed, for example <code>serial &middot; cu.usbserial-1420 &middot; 9600 8N1</code>.</li>
 <li><b>Wake the prompt</b>Press <kbd>Return</kbd>. SheepTerm never sends anything to a device on its own, so a quiet console stays quiet until you type.</li>
@@ -35,7 +35,7 @@
 <section class="x-sec" id="trouble"><h2>When it does not work</h2>
 <ul>
 <li><b>Blank screen.</b> The device may simply be silent. Press <kbd>Return</kbd> once or twice.</li>
-<li><b>Garbage characters.</b> The baud rate does not match. Close the tab and reconnect at the device&rsquo;s speed.</li>
+<li><b>Garbage characters.</b> The baud rate does not match. SheepTerm notices and shows a small &ldquo;Garbled? Try 115200&rdquo; card with the next speed to try (it only listens; nothing is sent). You can also pick the speed from the status bar.</li>
 <li><b>The device is not in the list.</b> Rescan, check Step 0, and make sure the device has power.</li>
 <li><b>The port is busy.</b> A serial port can be open in only one program at a time. Close <code>screen</code>, <code>minicom</code> or another SheepTerm tab that holds it. (For the same reason, Split Right and Split Down are refused on a serial tab.)</li>
 <li><b>You need other settings.</b> If your equipment needs parity, 7 data bits or hardware flow control, SheepTerm cannot set them today; use another tool for that device.</li>
