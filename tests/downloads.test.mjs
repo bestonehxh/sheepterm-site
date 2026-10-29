@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 import worker, { DownloadCounter } from '../worker/index.js';
 
 function sqlStore() {
@@ -55,4 +56,32 @@ test('redirects validate targets, preserve attribution, and exclude non-download
     assert.equal(fallback.headers.get('Location'), 'https://github.com/bestonehxh/SheepTerm/releases/latest');
     assert.equal(recorded.length, 1);
   } finally { globalThis.fetch = realFetch; }
+});
+test('private dashboard and API require a valid, unexpired owner session', async () => {
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const env = {
+    STATS_PASSWORD_SHA256: createHash('sha256').update('test-private-password').digest('hex'),
+    DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) },
+    ASSETS: { fetch: async () => new Response('not found', { status: 404 }) }
+  };
+  const ctx = { waitUntil() {} };
+  const req = (path, options) => new Request('https://sheepterm.com' + path, options);
+  const publicPage = await worker.fetch(req('/download-stats/'), env, ctx);
+  assert.match(await publicPage.text(), /Private statistics/);
+  assert.equal((await worker.fetch(req('/api/download-stats'), env, ctx)).status, 401);
+  const login = password => worker.fetch(req('/download-stats/login', { method: 'POST', headers: { Origin: 'https://sheepterm.com', 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ password }) }), env, ctx);
+  assert.equal((await login('wrong')).status, 401);
+  const good = await login('test-private-password');
+  assert.equal(good.status, 303);
+  assert.match(good.headers.get('Set-Cookie'), /HttpOnly; Secure; SameSite=Strict/);
+  const cookie = good.headers.get('Set-Cookie').split(';')[0];
+  const page = await worker.fetch(req('/download-stats/', { headers: { Cookie: cookie } }), env, ctx);
+  assert.match(await page.text(), /Download requests/);
+  assert.match(page.headers.get('Cache-Control'), /no-store/);
+  const stats = await worker.fetch(req('/api/download-stats', { headers: { Cookie: cookie } }), env, ctx);
+  assert.equal(stats.status, 200);assert.match(stats.headers.get('Cache-Control'), /no-store/);
+  assert.equal((await stats.json()).total, 0);
+  assert.equal((await worker.fetch(req('/worker/dashboard.js'), env, ctx)).status, 404);
+  count.sql.exec('UPDATE sessions SET expires = 0');
+  assert.equal((await worker.fetch(req('/api/download-stats', { headers: { Cookie: cookie } }), env, ctx)).status, 401);
 });

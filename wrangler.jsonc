@@ -2,7 +2,8 @@
   "name": "sheepterm-web",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-29",
-  "assets": { "directory": ".", "binding": "ASSETS", "run_worker_first": ["/download/*", "/api/download-stats"] },
+  "vars": { "STATS_PASSWORD_SHA256": "fc0b4369fb237dac113e1c12c537888fa5cfaa03b14757bce40895da47ab70c4" },
+  "assets": { "directory": ".", "binding": "ASSETS", "run_worker_first": ["/download/*", "/download-stats", "/download-stats/*", "/api/download-stats"] },
   "durable_objects": { "bindings": [{ "name": "DOWNLOADS", "class_name": "DownloadCounter" }] },
   "migrations": [{ "tag": "download-counter-v1", "new_sqlite_classes": ["DownloadCounter"] }],
   "observability": { "enabled": true }

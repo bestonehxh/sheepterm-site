@@ -1,3 +1,4 @@
+import dashboard from './dashboard.js';
 const TARGETS = {
   mac: { repo: "SheepTerm", pattern: /\.dmg$/i },
   windows: { repo: "SheepTerm-Windows", pattern: /\.zip$/i },
@@ -19,23 +20,47 @@ function source(value, host) {
 }
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 function counter(env) { return env.DOWNLOADS.get(env.DOWNLOADS.idFromName("sheepterm-downloads-v1")); }
+async function hash(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(x => x.toString(16).padStart(2, '0')).join(''); }
+function privateHeaders() { return { 'Cache-Control': 'private, no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'; form-action 'self'; base-uri 'self'" }; }
+function loginPage(failed = false) {
+  return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Private statistics — SheepTerm</title><style>body{font:17px system-ui;background:#15171c;color:#eee;max-width:420px;margin:12vh auto;padding:24px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:12px 0;border-radius:8px}a{color:#8abcf0}</style><h1>Private statistics</h1><p>Sign in with your private access password.</p>${failed ? '<p role="alert">Incorrect password. Please try again.</p>' : ''}<form method="post" action="/download-stats/login"><label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="128"></label><button type="submit">Sign in</button></form><a href="/">← SheepTerm</a></html>`, { status: failed ? 401 : 200, headers: { ...privateHeaders(), 'Content-Type': 'text/html;charset=UTF-8' } });
+}
+async function authorized(request, env) {
+  const token = (request.headers.get('Cookie') || '').split(';').map(x => x.trim()).find(x => x.startsWith('__Host-sheepterm_stats='))?.split('=')[1];
+  if (!/^[a-f0-9]{64}$/.test(token || '')) return false;
+  try { return (await counter(env).fetch('https://counter/session/' + await hash(token))).ok; } catch { return false; }
+}
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === '/download-stats/login' && request.method === 'POST') {
+      if (request.headers.get('Origin') !== url.origin || Number(request.headers.get('Content-Length') || 0) > 2048) return new Response('Forbidden', { status: 403 });
+      const form = await request.formData();
+      const password = form.get('password');
+      if (typeof password !== 'string' || password.length > 128 || !env.STATS_PASSWORD_SHA256 || await hash(password) !== env.STATS_PASSWORD_SHA256) return loginPage(true);
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(x => x.toString(16).padStart(2, '0')).join('');
+      const saved = await counter(env).fetch('https://counter/session/' + await hash(token), { method: 'POST' });
+      if (!saved.ok) return new Response('Sign in temporarily unavailable', { status: 503 });
+      return new Response(null, { status: 303, headers: { ...privateHeaders(), Location: '/download-stats/', 'Set-Cookie': '__Host-sheepterm_stats=' + token + '; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Strict' } });
+    }
+    if (url.pathname === '/download-stats/logout' && request.method === 'POST') {
+      if (request.headers.get('Origin') !== url.origin) return new Response('Forbidden', { status: 403 });
+      return new Response(null, { status: 303, headers: { ...privateHeaders(), Location: '/download-stats/', 'Set-Cookie': '__Host-sheepterm_stats=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict' } });
+    }
+    if (url.pathname === '/download-stats' || url.pathname.startsWith('/download-stats/')) {
+      if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
+      if (!await authorized(request, env)) return loginPage();
+      return new Response(request.method === 'HEAD' ? null : dashboard, { headers: { ...privateHeaders(), 'Content-Type': 'text/html;charset=UTF-8' } });
+    }
     if (url.pathname === "/api/download-stats") {
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
+      if (!await authorized(request, env)) return json({ error: 'Sign in required' }, 401);
       const days = [7, 30, 90].includes(Number(url.searchParams.get("days"))) ? Number(url.searchParams.get("days")) : 30;
-      const cacheKey = new Request(url.origin + "/api/download-stats?days=" + days);
-      const cached = await caches.default.match(cacheKey);
-      if (cached) return cached;
       try {
         const result = await counter(env).fetch("https://counter/stats?days=" + days);
         const response = new Response(result.body, result);
-        if (response.ok) {
-          response.headers.set("Cache-Control", "public, max-age=60");
-          ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
-        }
+        for (const [key, value] of Object.entries(privateHeaders())) response.headers.set(key, value);
         return response;
       } catch { return json({ error: "Download statistics are temporarily unavailable." }, 503); }
     }
@@ -95,10 +120,19 @@ export class DownloadCounter {
       PRIMARY KEY(day, platform, version, source, medium, campaign, placement, country, test)
     )`);
     this.sql.exec("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER)");
     this.sql.exec("INSERT OR IGNORE INTO metadata VALUES ('started_at', ?)", new Date().toISOString());
   }
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/session/')) {
+      const tokenHash = url.pathname.slice('/session/'.length);
+      if (!/^[a-f0-9]{64}$/.test(tokenHash)) return json({ error: 'invalid session' }, 400);
+      const now = Date.now();
+      this.sql.exec('DELETE FROM sessions WHERE expires < ?', now);
+      if (request.method === 'POST') { this.sql.exec('INSERT OR REPLACE INTO sessions VALUES (?, ?)', tokenHash, now + 86400000); return json({ ok: true }); }
+      return this.sql.exec('SELECT hash FROM sessions WHERE hash = ? AND expires > ?', tokenHash, now).toArray().length ? json({ ok: true }) : json({ error: 'expired' }, 401);
+    }
     if (url.pathname === "/record" && request.method === "POST") {
       const e = await request.json();
       const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
