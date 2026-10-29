@@ -1,0 +1,9 @@
+{
+  "name": "sheepterm-web",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-29",
+  "assets": { "directory": ".", "binding": "ASSETS", "run_worker_first": ["/download/*", "/api/download-stats"] },
+  "durable_objects": { "bindings": [{ "name": "DOWNLOADS", "class_name": "DownloadCounter" }] },
+  "migrations": [{ "tag": "download-counter-v1", "new_sqlite_classes": ["DownloadCounter"] }],
+  "observability": { "enabled": true }
+}

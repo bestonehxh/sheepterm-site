@@ -1,0 +1,9 @@
+.git
+node_modules
+.wrangler
+worker
+tests
+wrangler.jsonc
+package*.json
+DOWNLOAD-TRACKING.md
+*.test.mjs
