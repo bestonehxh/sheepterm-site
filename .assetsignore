@@ -1,8 +1,17 @@
 .git
+.git/**
+.gitignore
+.assetsignore
+.env*
+.dev.vars*
 node_modules
+node_modules/**
 .wrangler
+.wrangler/**
 worker
+worker/**
 tests
+tests/**
 wrangler.jsonc
 package*.json
 DOWNLOAD-TRACKING.md
