@@ -18,6 +18,7 @@ test('counter persists atomic aggregates and excludes test campaigns from every 
   await counter.fetch(new Request('https://counter/record', { method: 'POST', body: JSON.stringify({ ...event, test: true }) }));
   const report = await (await counter.fetch(new Request('https://counter/stats?days=30'))).json();
   assert.equal(report.total, 3);
+  assert.equal(report.test_requests, 1);
   assert.deepEqual(report.countries, [{ country: 'BR', count: 3 }]);
   assert.equal(report.campaigns[0].source, 'reddit');
   assert.equal(report.versions[0].version, 'v6.0-13');

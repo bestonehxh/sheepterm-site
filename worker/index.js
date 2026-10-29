@@ -119,6 +119,7 @@ export class DownloadCounter {
       started_at: this.sql.exec("SELECT value FROM metadata WHERE key = 'started_at'").one().value,
       days, timezone: "Asia/Bangkok", generated_at: new Date().toISOString(),
       total: this.sql.exec(`SELECT COALESCE(SUM(count), 0) AS total FROM counts ${where}`, ...args).one().total,
+      test_requests: this.sql.exec("SELECT COALESCE(SUM(count), 0) AS total FROM counts WHERE test = 1").one().total,
       platforms: group("platform"), versions: group("platform, version"), sources: group("source"),
       countries: group("country"), campaigns: group("source, medium, campaign"), placements: group("placement"), daily: group("day")
     });
