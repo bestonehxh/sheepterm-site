@@ -21,7 +21,9 @@ function source(value, host) {
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 function counter(env) { return env.DOWNLOADS.get(env.DOWNLOADS.idFromName("sheepterm-downloads-v1")); }
 async function hash(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(x => x.toString(16).padStart(2, '0')).join(''); }
-function privateHeaders() { return { 'Cache-Control': 'private, no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'; form-action 'self'; base-uri 'self'" }; }
+// HTML form POSTs under no-referrer send Origin: null, which conflicts with
+// the strict same-origin CSRF check. Keep referrers within our own origin.
+function privateHeaders() { return { 'Cache-Control': 'private, no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'; form-action 'self'; base-uri 'self'" }; }
 function loginPage(failed = false) {
   return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Private statistics — SheepTerm</title><style>body{font:17px system-ui;background:#15171c;color:#eee;max-width:420px;margin:12vh auto;padding:24px}input,button{box-sizing:border-box;width:100%;padding:14px;margin:12px 0;border-radius:8px}a{color:#8abcf0}</style><h1>Private statistics</h1><p>Sign in with your private access password.</p>${failed ? '<p role="alert">Incorrect password. Please try again.</p>' : ''}<form method="post" action="/download-stats/login"><label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="128"></label><button type="submit">Sign in</button></form><a href="/">← SheepTerm</a></html>`, { status: failed ? 401 : 200, headers: { ...privateHeaders(), 'Content-Type': 'text/html;charset=UTF-8' } });
 }

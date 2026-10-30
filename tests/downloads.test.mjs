@@ -67,10 +67,13 @@ test('private dashboard and API require a valid, unexpired owner session', async
   const ctx = { waitUntil() {} };
   const req = (path, options) => new Request('https://sheepterm.com' + path, options);
   const publicPage = await worker.fetch(req('/download-stats/'), env, ctx);
+  assert.equal(publicPage.headers.get('Referrer-Policy'), 'same-origin');
   assert.match(await publicPage.text(), /Private statistics/);
   assert.equal((await worker.fetch(req('/api/download-stats'), env, ctx)).status, 401);
   const login = password => worker.fetch(req('/download-stats/login', { method: 'POST', headers: { Origin: 'https://sheepterm.com', 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ password }) }), env, ctx);
   assert.equal((await login('wrong')).status, 401);
+  const crossOrigin = await worker.fetch(req('/download-stats/login', { method: 'POST', headers: { Origin: 'https://evil.example', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'password=test-private-password' }), env, ctx);
+  assert.equal(crossOrigin.status, 403);
   const good = await login('test-private-password');
   assert.equal(good.status, 303);
   assert.match(good.headers.get('Set-Cookie'), /HttpOnly; Secure; SameSite=Strict/);
