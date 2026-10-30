@@ -82,4 +82,16 @@ document.querySelectorAll("[data-ver]").forEach(function(e){release(e.dataset.ve
  function set(v,os){v.setAttribute("data-sel",os);[].forEach.call(v.querySelectorAll(".seg button"),function(b){b.setAttribute("aria-pressed",b.dataset.os===os?"true":"false")})}
  all.forEach(function(v){set(v,want);[].forEach.call(v.querySelectorAll(".seg button"),function(b){b.addEventListener("click",function(){all.forEach(function(x){set(x,b.dataset.os)})})})});
 })();
+// Features page: one panel at a time, #hash = the panel, the list marks it
+(function(){var nav=document.querySelector(".fx-nav");if(!nav)return;
+ var links=[].slice.call(nav.querySelectorAll("a")),panels=[].slice.call(document.querySelectorAll(".fx-panel"));
+ function show(id,focus){var p=document.getElementById(id);if(!p||panels.indexOf(p)<0)p=panels[0];
+  panels.forEach(function(x){x.hidden=x!==p});
+  links.forEach(function(a){if(a.getAttribute("href")==="#"+p.id){a.setAttribute("aria-current","true");a.scrollIntoView({block:"nearest",inline:"center"})}else a.removeAttribute("aria-current")});
+  if(focus){var bar=document.querySelector(".nav"),top=nav.parentNode.getBoundingClientRect().top+window.scrollY-(bar?bar.offsetHeight:60)-20;if(window.scrollY>top)window.scrollTo({top:top,behavior:"auto"});p.focus({preventScroll:true})}}
+ links.forEach(function(a){a.addEventListener("click",function(e){if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();var id=a.getAttribute("href").slice(1);
+  history.pushState(null,"","#"+id);show(id,true)})});
+ function fromHash(){show(decodeURIComponent(location.hash.slice(1)),false)}
+ window.addEventListener("hashchange",fromHash);window.addEventListener("popstate",fromHash);fromHash();
+})();
 })();
