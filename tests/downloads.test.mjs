@@ -95,7 +95,10 @@ test('problem reports accept messages and are visible only to signed-in owner', 
   const send = (message, origin = 'https://sheepterm.com') => worker.fetch(req('/api/reports', {method:'POST', headers:{Origin:origin, 'Content-Type':'application/json', 'CF-Connecting-IP':'192.0.2.1'}, body:JSON.stringify({message})}), env, ctx);
   assert.equal((await send('Problem on Linux', 'https://evil.example')).status, 403);
   assert.equal((await send('  ')).status, 400);
+  count.sql.exec("INSERT INTO reports (created_at, message) VALUES ('2026-01-01', 'Old private report')");
   assert.equal((await send('Problem on Linux')).status, 200);
+  const publicReports = await (await worker.fetch(req('/api/public-reports'), env, ctx)).json();
+  assert.deepEqual(publicReports.reports.map(r => r.message), ['Problem on Linux']);
   assert.equal((await worker.fetch(req('/api/reports'), env, ctx)).status, 401);
   const login = await worker.fetch(req('/download-stats/login', {method:'POST', headers:{Origin:'https://sheepterm.com', 'Content-Type':'application/x-www-form-urlencoded'}, body:'password=secret'}), env, ctx);
   const cookie = login.headers.get('Set-Cookie').split(';')[0];

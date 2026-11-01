@@ -61,6 +61,11 @@ export default {
       if (!await authorized(request, env)) return new Response(null, { status: 303, headers: { ...privateHeaders(), Location: '/download-stats/' } });
       return new Response(reportsPage, { headers: { ...privateHeaders(), 'Content-Type': 'text/html;charset=UTF-8' } });
     }
+    if (url.pathname === '/api/public-reports') {
+      if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+      try { return await counter(env).fetch('https://counter/public-reports'); }
+      catch { return json({ error: 'Reports unavailable' }, 503); }
+    }
     if (url.pathname === '/api/reports') {
       if (request.method === 'GET') {
         if (!await authorized(request, env)) return json({ error: 'Sign in required' }, 401);
@@ -151,6 +156,7 @@ export class DownloadCounter {
     this.sql.exec("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, message TEXT NOT NULL)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS public_reports (report_id INTEGER PRIMARY KEY)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS report_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)");
     this.sql.exec("INSERT OR IGNORE INTO metadata VALUES ('started_at', ?)", new Date().toISOString());
   }
@@ -164,6 +170,7 @@ export class DownloadCounter {
       if (request.method === 'POST') { this.sql.exec('INSERT OR REPLACE INTO sessions VALUES (?, ?)', tokenHash, now + 86400000); return json({ ok: true }); }
       return this.sql.exec('SELECT hash FROM sessions WHERE hash = ? AND expires > ?', tokenHash, now).toArray().length ? json({ ok: true }) : json({ error: 'expired' }, 401);
     }
+    if (url.pathname === '/public-reports' && request.method === 'GET') return json({ reports: this.sql.exec('SELECT reports.id, created_at, message FROM reports JOIN public_reports ON reports.id = public_reports.report_id ORDER BY reports.id DESC LIMIT 100').toArray() });
     if (url.pathname === '/reports' && request.method === 'GET') return json({ reports: this.sql.exec('SELECT id, created_at, message FROM reports ORDER BY id DESC LIMIT 500').toArray() });
     if (url.pathname === '/reports' && request.method === 'POST') {
       const { message, key } = await request.json(); const now = Date.now();
@@ -172,6 +179,7 @@ export class DownloadCounter {
       if (current && current.count >= 10) return json({ error: 'Too many reports. Please try again tomorrow.' }, 429);
       this.sql.exec('INSERT INTO report_limits VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1', key, now + 86400000);
       this.sql.exec('INSERT INTO reports (created_at, message) VALUES (?, ?)', new Date().toISOString(), message);
+      this.sql.exec('INSERT INTO public_reports (report_id) VALUES (last_insert_rowid())');
       return json({ ok: true });
     }
     if (url.pathname === "/record" && request.method === "POST") {
