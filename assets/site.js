@@ -66,7 +66,7 @@ document.querySelectorAll("a[data-quick]").forEach(function(a){
  var repo=os==="win"?a.dataset.win:os==="linux"?a.dataset.linux:a.dataset.mac;
  var t=a.querySelector(".t");if(t)t.textContent=(a.dataset.prefix||"Download")+" for "+NM[os];
  a.href=trackedLink(a,repo)||GH+repo+"/releases/latest";
- if(os==="linux"){a.href="/";return;} // Choose an architecture on the SheepTerm page.
+ if(os==="linux"){a.href="/";if(t)t.textContent="Linux download currently unavailable";return;}
  release(repo).then(function(rel){var r=pick(rel,os==="linux"?"linux-x86_64\\.tar\\.gz$":"");a.href=trackedLink(a,repo,rel.tag)||r.url;
   if(a.closest(".acard"))return;
   document.querySelectorAll("[data-quick-meta]").forEach(function(m){m.innerHTML="<b>"+r.v+"</b> · "+mb(r.size)+" · "+NM[os]})}).catch(function(){});
