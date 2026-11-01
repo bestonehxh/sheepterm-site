@@ -88,3 +88,19 @@ test('private dashboard and API require a valid, unexpired owner session', async
   count.sql.exec('UPDATE sessions SET expires = 0');
   assert.equal((await worker.fetch(req('/api/download-stats', { headers: { Cookie: cookie } }), env, ctx)).status, 401);
 });
+test('problem reports accept messages and are visible only to signed-in owner', async () => {
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const env = { STATS_PASSWORD_SHA256: createHash('sha256').update('secret').digest('hex'), DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) }, ASSETS: { fetch: async () => new Response('asset') } };
+  const ctx = { waitUntil() {} }, req = (path, options) => new Request('https://sheepterm.com' + path, options);
+  const send = (message, origin = 'https://sheepterm.com') => worker.fetch(req('/api/reports', {method:'POST', headers:{Origin:origin, 'Content-Type':'application/json', 'CF-Connecting-IP':'192.0.2.1'}, body:JSON.stringify({message})}), env, ctx);
+  assert.equal((await send('Problem on Linux', 'https://evil.example')).status, 403);
+  assert.equal((await send('  ')).status, 400);
+  assert.equal((await send('Problem on Linux')).status, 200);
+  assert.equal((await worker.fetch(req('/api/reports'), env, ctx)).status, 401);
+  const login = await worker.fetch(req('/download-stats/login', {method:'POST', headers:{Origin:'https://sheepterm.com', 'Content-Type':'application/x-www-form-urlencoded'}, body:'password=secret'}), env, ctx);
+  const cookie = login.headers.get('Set-Cookie').split(';')[0];
+  const reports = await worker.fetch(req('/api/reports', {headers:{Cookie:cookie}}), env, ctx);
+  assert.equal((await reports.json()).reports[0].message, 'Problem on Linux');
+  for (let i = 0; i < 9; i++) assert.equal((await send('Another report')).status, 200);
+  assert.equal((await send('Too many')).status, 429);
+});

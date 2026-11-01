@@ -1,4 +1,5 @@
 import dashboard from './dashboard.js';
+import reportsPage from './reports.js';
 const TARGETS = {
   mac: { repo: "SheepTerm", pattern: /\.dmg$/i },
   windows: { repo: "SheepTerm-Windows", pattern: /\.zip$/i },
@@ -54,6 +55,32 @@ export default {
       if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405 });
       if (!await authorized(request, env)) return loginPage();
       return new Response(request.method === 'HEAD' ? null : dashboard, { headers: { ...privateHeaders(), 'Content-Type': 'text/html;charset=UTF-8' } });
+    }
+    if (url.pathname === '/reports' || url.pathname === '/reports/') {
+      if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+      if (!await authorized(request, env)) return new Response(null, { status: 303, headers: { ...privateHeaders(), Location: '/download-stats/' } });
+      return new Response(reportsPage, { headers: { ...privateHeaders(), 'Content-Type': 'text/html;charset=UTF-8' } });
+    }
+    if (url.pathname === '/api/reports') {
+      if (request.method === 'GET') {
+        if (!await authorized(request, env)) return json({ error: 'Sign in required' }, 401);
+        try { const response = await counter(env).fetch('https://counter/reports'); return new Response(response.body, { status: response.status, headers: privateHeaders() }); }
+        catch { return json({ error: 'Reports unavailable' }, 503); }
+      }
+      if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+      if (request.headers.get('Origin') !== url.origin) return json({ error: 'Forbidden' }, 403);
+      if (!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type') || '')) return json({ error: 'Invalid content type' }, 415);
+      try {
+        const reader = request.body.getReader(); let bytes = 0, chunks = [];
+        while (true) { const part = await reader.read(); if (part.done) break; bytes += part.value.length; if (bytes > 8192) { await reader.cancel(); return json({ error: 'Report too long' }, 413); } chunks.push(part.value); }
+        const input = JSON.parse(new TextDecoder().decode(Uint8Array.from(chunks.flatMap(c => Array.from(c)))));
+        const message = typeof input.message === 'string' ? input.message.trim() : '';
+        if (!message || message.length > 3000) return json({ error: 'Enter a message of up to 3000 characters' }, 400);
+        const ip = request.headers.get('CF-Connecting-IP');
+        if (!ip) return json({ error: 'Reports temporarily unavailable' }, 503);
+        const key = await hash(ip + ':' + new Date().toISOString().slice(0, 10));
+        return await counter(env).fetch('https://counter/reports', { method: 'POST', body: JSON.stringify({ message, key }) });
+      } catch { return json({ error: 'Unable to submit report' }, 503); }
     }
     if (url.pathname === "/api/download-stats") {
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
@@ -123,6 +150,8 @@ export class DownloadCounter {
     )`);
     this.sql.exec("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, message TEXT NOT NULL)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS report_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)");
     this.sql.exec("INSERT OR IGNORE INTO metadata VALUES ('started_at', ?)", new Date().toISOString());
   }
   async fetch(request) {
@@ -134,6 +163,16 @@ export class DownloadCounter {
       this.sql.exec('DELETE FROM sessions WHERE expires < ?', now);
       if (request.method === 'POST') { this.sql.exec('INSERT OR REPLACE INTO sessions VALUES (?, ?)', tokenHash, now + 86400000); return json({ ok: true }); }
       return this.sql.exec('SELECT hash FROM sessions WHERE hash = ? AND expires > ?', tokenHash, now).toArray().length ? json({ ok: true }) : json({ error: 'expired' }, 401);
+    }
+    if (url.pathname === '/reports' && request.method === 'GET') return json({ reports: this.sql.exec('SELECT id, created_at, message FROM reports ORDER BY id DESC LIMIT 500').toArray() });
+    if (url.pathname === '/reports' && request.method === 'POST') {
+      const { message, key } = await request.json(); const now = Date.now();
+      this.sql.exec('DELETE FROM report_limits WHERE expires < ?', now);
+      const current = this.sql.exec('SELECT count FROM report_limits WHERE key = ?', key).toArray()[0];
+      if (current && current.count >= 10) return json({ error: 'Too many reports. Please try again tomorrow.' }, 429);
+      this.sql.exec('INSERT INTO report_limits VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1', key, now + 86400000);
+      this.sql.exec('INSERT INTO reports (created_at, message) VALUES (?, ?)', new Date().toISOString(), message);
+      return json({ ok: true });
     }
     if (url.pathname === "/record" && request.method === "POST") {
       const e = await request.json();
