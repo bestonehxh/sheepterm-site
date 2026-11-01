@@ -43,8 +43,8 @@ function pick(r,pat){var a=null;(pat?[pat]:["\\.dmg$","\\.zip$"]).some(function(
 var NM={mac:"macOS",win:"Windows",linux:"Linux"};
 // per-OS highlight inside each .dl group
 document.querySelectorAll(".dl").forEach(function(g){
- var b=g.querySelectorAll("a.btn[data-os]");if(!b.length)return;
- var hit=null;b.forEach(function(x){if(x.dataset.os===ME)hit=x});
+ var b=g.querySelectorAll("a.btn[data-os], [data-linux-button]");if(!b.length)return;
+ var hit=null;b.forEach(function(x){if((x.dataset.os||(x.hasAttribute("data-linux-button")?"linux":""))===ME)hit=x});
  if(!hit){b.forEach(function(x){if(x.dataset.os==="mac")hit=x})}
  if(hit)hit.classList.add("mine");
 });
@@ -66,6 +66,7 @@ document.querySelectorAll("a[data-quick]").forEach(function(a){
  var repo=os==="win"?a.dataset.win:os==="linux"?a.dataset.linux:a.dataset.mac;
  var t=a.querySelector(".t");if(t)t.textContent=(a.dataset.prefix||"Download")+" for "+NM[os];
  a.href=trackedLink(a,repo)||GH+repo+"/releases/latest";
+ if(os==="linux"){a.href="/";return;} // Choose an architecture on the SheepTerm page.
  release(repo).then(function(rel){var r=pick(rel,os==="linux"?"linux-x86_64\\.tar\\.gz$":"");a.href=trackedLink(a,repo,rel.tag)||r.url;
   if(a.closest(".acard"))return;
   document.querySelectorAll("[data-quick-meta]").forEach(function(m){m.innerHTML="<b>"+r.v+"</b> · "+mb(r.size)+" · "+NM[os]})}).catch(function(){});
