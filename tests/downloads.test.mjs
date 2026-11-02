@@ -107,3 +107,19 @@ test('problem reports accept messages and are visible only to signed-in owner', 
   for (let i = 0; i < 9; i++) assert.equal((await send('Another report')).status, 200);
   assert.equal((await send('Too many')).status, 429);
 });
+
+test('Linux downloads select the requested architecture and prefer a single-file AppImage', async () => {
+  const realFetch = globalThis.fetch;
+  const repo = 'https://github.com/bestonehxh/SheepTerm-Linux/releases/download/v0.1-5/';
+  const names = ['SheepTerm-0.1-5-linux-x86_64.tar.gz', 'SheepTerm-0.1-5-linux-aarch64.tar.gz', 'SheepTerm-0.1-5-linux-x86_64.AppImage', 'SheepTerm-0.1-5-linux-aarch64.AppImage'];
+  globalThis.fetch = async () => Response.json({ tag_name: 'v0.1-5', assets: names.map(name => ({ name, browser_download_url: repo + name })) });
+  const env = { DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: async () => Response.json({ ok: true }) }) } };
+  const ctx = { waitUntil() {} };
+  try {
+    for (const [route, name] of [['linux', names[2]], ['linux-arm64', names[3]]]) {
+      const res = await worker.fetch(new Request('https://sheepterm.com/download/' + route), env, ctx);
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.get('Location'), repo + name);
+    }
+  } finally { globalThis.fetch = realFetch; }
+});

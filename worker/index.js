@@ -3,8 +3,8 @@ import reportsPage from './reports.js';
 const TARGETS = {
   mac: { repo: "SheepTerm", pattern: /\.dmg$/i },
   windows: { repo: "SheepTerm-Windows", pattern: /\.zip$/i },
-  linux: { repo: "SheepTerm-Linux", pattern: /linux-x86_64\.tar\.gz$/i },
-  "linux-arm64": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.tar\.gz$/i }
+  linux: { repo: "SheepTerm-Linux", pattern: /linux-x86_64\.(?:AppImage|tar\.gz)$/i },
+  "linux-arm64": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.(?:AppImage|tar\.gz)$/i }
 };
 const clean = (value, fallback = "unknown") => /^[a-z0-9_.-]{1,64}$/i.test(value || "") ? value.toLowerCase() : fallback;
 function refHost(value) {
@@ -113,7 +113,8 @@ export default {
       });
       if (!response.ok) throw new Error("release unavailable");
       const release = await response.json();
-      asset = (release.assets || []).find(a => target.pattern.test(a.name));
+      const matches = (release.assets || []).filter(a => target.pattern.test(a.name));
+      asset = matches.find(a => /\.AppImage$/i.test(a.name)) || matches[0];
       if (!asset && platform === "mac") asset = (release.assets || []).find(a => /\.zip$/i.test(a.name));
       if (asset && asset.browser_download_url.startsWith(base + "/releases/download/")) {
         location = asset.browser_download_url;
