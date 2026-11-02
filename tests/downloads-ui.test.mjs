@@ -10,3 +10,11 @@ test('Linux download selector exposes both architectures and quick link opens th
   assert.match(html, /href="\/download\/linux-arm64">ARM64 <small>aarch64<\/small>/);
   assert.match(script, /a\.href="\/#linux-downloads"/);
 });
+
+test('Linux install instructions explain the executable permission and data migration', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /Properties → Permissions/);
+  assert.match(html, /Allow executing file as program/);
+  assert.match(html, /chmod \+x SheepTerm-\*\.AppImage/);
+  assert.match(html, /existing <code>Data<\/code> folder beside the AppImage/);
+});
