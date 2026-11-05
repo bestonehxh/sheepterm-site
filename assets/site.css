@@ -79,7 +79,7 @@ section{padding:88px 0 0}
 .grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 @media(min-width:660px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(min-width:980px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.acard{position:relative;display:flex;flex-direction:column;gap:14px;padding:26px;border-radius:var(--r);border:1px solid var(--line);background:linear-gradient(180deg,#1e222a,#181b21);overflow:hidden;transition:transform .2s,border-color .2s,box-shadow .2s}
+.acard{position:relative;display:flex;flex-direction:column;gap:14px;padding:26px;border-radius:var(--r);border:1px solid var(--line);background:linear-gradient(180deg,#181D27,#13171F);overflow:hidden;transition:transform .2s,border-color .2s,box-shadow .2s}
 .acard::before{content:"";position:absolute;left:-40px;top:-60px;width:260px;height:200px;background:radial-gradient(closest-side,color-mix(in srgb,var(--glow) 24%,transparent),transparent);pointer-events:none}
 .acard:hover{transform:translateY(-3px);border-color:#454b57;box-shadow:0 18px 40px rgba(0,0,0,.35)}
 .acard>*{position:relative}
@@ -106,7 +106,7 @@ section{padding:88px 0 0}
 /* install */
 .cols{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 @media(min-width:800px){.cols.two{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.panel{border:1px solid var(--line);border-radius:var(--r);padding:26px;background:linear-gradient(180deg,#1e222a,#181b21)}
+.panel{border:1px solid var(--line);border-radius:var(--r);padding:26px;background:linear-gradient(180deg,#181D27,#13171F)}
 .panel h3{margin:0 0 12px;display:flex;gap:10px;align-items:center;font-size:19px}
 .panel h3 svg{width:20px;height:20px;fill:currentColor}
 .panel ol{margin:0;padding-left:20px;color:var(--dim2);font-size:15px}
@@ -282,7 +282,7 @@ img,svg,video{max-width:100%}
 .shot.wide{max-width:1120px}
 img.art{display:block;width:100%;height:auto;border-radius:16px;border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.45)}
 .ngrid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-top:28px}
-.ncard{padding:22px;border-radius:var(--r);border:1px solid var(--line);background:linear-gradient(180deg,#1e222a,#181b21)}
+.ncard{padding:22px;border-radius:var(--r);border:1px solid var(--line);background:linear-gradient(180deg,#181D27,#13171F)}
 .ncard h3{margin:14px 0 6px;font-size:18px;letter-spacing:-.01em}
 .ncard p{margin:0;color:var(--dim2);font-size:14.5px;line-height:1.5}
 .more{margin-top:80px}
@@ -357,3 +357,12 @@ section.fx-panel{scroll-margin-top:160px}
 .nav .navdl:hover{background:#fff}
 @media(max-width:760px){.nav .navdl{display:none}}
 footer nav{display:flex;flex-wrap:wrap;gap:8px 18px}footer nav a{margin-right:0;white-space:nowrap}
+/* v2 components (same as assets/v2.css): hairlines, white primary button, calmer radii */
+:root{--line:rgba(255,255,255,.09)}
+.btn{border-radius:10px}
+.btn.lg{border-radius:12px}
+.btn.mine{background:#E9ECF2;border-color:#E9ECF2;color:#0A0C10}
+a.btn.mine:hover{background:#fff;border-color:#fff}
+.btn:not(.mine):not(.off){background:transparent;border-color:rgba(255,255,255,.14)}
+.btn:not(.mine):not(.off):hover{background:rgba(255,255,255,.05)}
+h1 em,.hero h1 em{background:linear-gradient(92deg,#8FD0F5,#5AA5D6 45%,#7DD98C);-webkit-background-clip:text;background-clip:text;color:transparent}
