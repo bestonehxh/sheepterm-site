@@ -79,7 +79,7 @@ test('private dashboard and API require a valid, unexpired owner session', async
   assert.match(good.headers.get('Set-Cookie'), /HttpOnly; Secure; SameSite=Strict/);
   const cookie = good.headers.get('Set-Cookie').split(';')[0];
   const page = await worker.fetch(req('/download-stats/', { headers: { Cookie: cookie } }), env, ctx);
-  assert.match(await page.text(), /Download requests/);
+  assert.match(await page.text(), /<h1>Downloads<\/h1>/);
   assert.match(page.headers.get('Cache-Control'), /no-store/);
   const stats = await worker.fetch(req('/api/download-stats', { headers: { Cookie: cookie } }), env, ctx);
   assert.equal(stats.status, 200);assert.match(stats.headers.get('Cache-Control'), /no-store/);
