@@ -352,6 +352,12 @@ kbd{font:500 12.5px "JetBrains Mono",ui-monospace,monospace;background:var(--bg2
 section.fx-panel{scroll-margin-top:160px}
 }
 @media(max-width:560px){.fx-duo{grid-template-columns:minmax(0,1fr)}.fx-keys td{white-space:normal}}
+
+/* SheepTerm navigation and Linux architecture picker */
+.sheepterm-subnav{display:flex;gap:8px;padding-top:20px}.sheepterm-subnav a{color:var(--dim2);text-decoration:none;padding:8px 12px;border-radius:8px;font-size:14px}.sheepterm-subnav a:hover,.sheepterm-subnav a[aria-current]{color:var(--text);background:var(--chrome)}
+.linux-download{position:relative}.linux-download summary{cursor:pointer;list-style:none}.linux-download summary::-webkit-details-marker{display:none}.linux-download summary:hover{border-color:var(--accent)}.linux-options{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;z-index:10;padding:6px;border:1px solid var(--line);border-radius:12px;background:#1b1e25;box-shadow:0 8px 24px #0008}.linux-options a{display:block;color:var(--text);text-decoration:none;padding:10px 12px;border-radius:8px;white-space:nowrap}.linux-options a:hover,.linux-options a:focus{background:var(--chrome)}.linux-options small{color:var(--dim2);margin-left:8px}.linux-download summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}@media(max-width:520px){.hero .linux-download,.cta2 .linux-download{width:100%}.hero .linux-download summary,.cta2 .linux-download summary{width:100%;box-sizing:border-box;justify-content:center}.linux-options{box-sizing:border-box}}
+
+.nav .report-button{display:inline-flex;align-items:center;color:var(--dim2);text-decoration:none;font-size:14px;font-weight:500;padding:7px 11px;border-radius:8px;white-space:nowrap;transition:background .15s,color .15s;order:2}.nav .report-button:hover{color:var(--text);background:var(--chrome)}@media(max-width:400px){.nav .report-button{padding:7px 8px}}
 /* v2 header on the SheepTerm pages (same look as assets/v2.css) */
 .nav .navdl{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:8px;background:var(--text);color:#0A0C10;font-weight:600;font-size:14px;text-decoration:none;margin-left:6px}
 .nav .navdl:hover{background:#fff}
