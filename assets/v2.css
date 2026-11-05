@@ -119,7 +119,7 @@ h2{font-size:clamp(30px,4.2vw,44px);line-height:1.1;letter-spacing:-.028em;margi
 footer{padding:48px 0 56px;color:var(--mu2);font-size:14px}
 footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center}
 footer nav{display:flex;gap:20px;flex-wrap:wrap}
-footer a{color:var(--mu)}
+footer a{color:var(--mu);white-space:nowrap}
 
 /* ---------- guide page ---------- */
 .ghead{padding:72px 0 40px;border-bottom:1px solid var(--line);background:radial-gradient(600px 260px at 20% 0,rgba(90,165,214,.14),transparent 70%)}

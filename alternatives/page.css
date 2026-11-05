@@ -59,3 +59,7 @@ kbd{font:500 .85em "JetBrains Mono",ui-monospace,monospace;background:var(--chro
 .x-cta{margin-top:56px}
 .x-cta .cta2{margin-top:0}
 @media(max-width:560px){.x-head{padding-top:36px}.x-lede{font-size:17px}.x-tbl{font-size:14px}}
+
+/* the card list is not a text list: .x-sec ul padding must not indent it */
+.x-sec .x-cards{padding:0;max-width:none}
+.x-head+.x-sec{padding-top:0}
