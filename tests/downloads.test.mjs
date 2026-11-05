@@ -123,3 +123,78 @@ test('Linux downloads select the requested architecture and prefer a single-file
     }
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('each counted download keeps its time and a 30-day visitor code, never the address', async () => {
+  const counter = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const ip = '198.51.100.23', ua = 'Mozilla/5.0 Safari';
+  const fp = v => createHash('sha256').update(v).digest('hex');
+  const record = (e) => counter.fetch(new Request('https://counter/record', { method: 'POST', body: JSON.stringify(e) }));
+  const base = { platform: 'mac', version: 'v6.0-18', source: 'direct', medium: 'none', campaign: 'none', placement: 'hero', country: 'TH', test: false };
+  await record({ ...base, fp: fp(ip + '\n' + ua) });
+  await record({ ...base, fp: fp(ip + '\n' + ua), platform: 'windows' });
+  await record({ ...base, fp: fp('203.0.113.9\n' + ua) });
+  await record({ ...base, fp: 'not-a-digest' });
+  await record({ ...base, fp: fp(ip + '\n' + ua), test: true });
+  const report = await (await counter.fetch(new Request('https://counter/stats?days=7'))).json();
+  assert.equal(report.total, 4);
+  assert.equal(report.visitors, 2);                       // the bad digest has no code; test rows are left out
+  assert.equal(report.recent.length, 4);
+  assert.match(report.recent[0].ts, /^\d{4}-\d\d-\d\dT/);
+  const codes = report.recent.map(r => r.visitor);
+  assert.equal(codes[3], codes[2]);                        // same browser + address = same code
+  assert.notEqual(codes[1], codes[2]);
+  assert.equal(codes[0], null);
+  assert.match(codes[2], /^[a-f0-9]{10}$/);
+  assert.deepEqual(report.recent.map(r => r.times), [0, 1, 2, 2]);
+  assert.deepEqual(report.daily.map(d => [d.count, d.visitors]), [[4, 2]]);
+  // nothing in storage holds the address, the browser string or the digest
+  const dump = JSON.stringify(['events', 'counts', 'metadata'].map(t => counter.sql.exec('SELECT * FROM ' + t).toArray()));
+  for (const secret of [ip, ua, fp(ip + '\n' + ua)]) assert.equal(dump.includes(secret), false, secret);
+  // a new 30-day period gives the same browser a new code
+  const now = Date.now(), period = 30 * 86400000;
+  const a = await counter.visitor(fp(ip + '\n' + ua), now), b = await counter.visitor(fp(ip + '\n' + ua), now + period);
+  assert.equal(a, codes[2]); assert.notEqual(a, b);
+  // the secret survives a restart: codes stay the same inside the period
+  const restarted = new DownloadCounter({ storage: { sql: counter.sql } });
+  assert.equal(await restarted.visitor(fp(ip + '\n' + ua), now), a);
+});
+
+test('daily rows come newest first and rows older than 90 days are removed', async () => {
+  const counter = new DownloadCounter({ storage: { sql: sqlStore() } });
+  for (const day of ['2026-01-01', '2099-01-03', '2099-01-02']) {
+    counter.sql.exec("INSERT INTO counts VALUES (?, 'mac', 'v', 'direct', 'none', 'none', 'hero', 'TH', 0, 2)", day);
+    counter.sql.exec("INSERT INTO events (ts, day, platform, visitor, test) VALUES ('x', ?, 'mac', 'aaaaaaaaaa', 0)", day);
+  }
+  const all = counter.sql.exec("SELECT day FROM counts WHERE day >= '2099-01-01' ORDER BY day DESC").toArray().map(r => r.day);
+  assert.deepEqual(all, ['2099-01-03', '2099-01-02']);
+  await counter.fetch(new Request('https://counter/record', { method: 'POST', body: JSON.stringify({ platform: 'mac', version: 'v', source: 'direct', medium: 'none', campaign: 'none', placement: 'hero', country: 'TH', test: false }) }));
+  assert.equal(counter.sql.exec("SELECT COUNT(*) AS n FROM events WHERE day = '2026-01-01'").one().n, 0);
+  assert.equal(counter.sql.exec("SELECT COUNT(*) AS n FROM counts WHERE day = '2026-01-01'").one().n, 0);
+});
+
+test('the stats API adds GitHub release counters and keeps one running total per platform per day', async () => {
+  const realFetch = globalThis.fetch;
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const env = { STATS_PASSWORD_SHA256: createHash('sha256').update('pw').digest('hex'), DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) }, ASSETS: { fetch: async () => new Response('asset') } };
+  const ctx = { waitUntil() {} }, req = (path, options) => new Request('https://sheepterm.com' + path, options);
+  let macCount = 10;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/SheepTerm-Linux/')) return new Response('down', { status: 503 });
+    if (String(url).includes('/SheepTerm-Windows/')) return Response.json([{ tag_name: 'v2.0-1', published_at: '2026-11-01T00:00:00Z', assets: [{ download_count: 7 }] }]);
+    return Response.json([{ tag_name: 'v6.0-18', published_at: '2026-11-02T00:00:00Z', assets: [{ download_count: macCount }, { download_count: 1 }] }, { tag_name: 'v6.0-17', published_at: '2026-10-30T00:00:00Z', assets: [{ download_count: 5 }] }]);
+  };
+  try {
+    const login = await worker.fetch(req('/download-stats/login', { method: 'POST', headers: { Origin: 'https://sheepterm.com', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'password=pw' }), env, ctx);
+    const cookie = login.headers.get('Set-Cookie').split(';')[0];
+    const get = async () => (await worker.fetch(req('/api/download-stats', { headers: { Cookie: cookie } }), env, ctx)).json();
+    let data = await get();
+    assert.equal(data.github.mac.total, 16);
+    assert.deepEqual(data.github.mac.releases[0], { tag: 'v6.0-18', published: '2026-11-02', count: 11 });
+    assert.equal(data.github.windows.total, 7);
+    assert.equal(data.github.linux, null);                  // GitHub down for one repo: the rest still shows
+    macCount = 20; data = await get();
+    assert.deepEqual(data.github_daily.map(r => [r.platform, r.total]), [['mac', 26], ['windows', 7]]);
+    macCount = 3; data = await get();                       // a counter never goes back down within a day
+    assert.equal(data.github_daily.find(r => r.platform === 'mac').total, 26);
+  } finally { globalThis.fetch = realFetch; }
+});

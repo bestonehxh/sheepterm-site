@@ -21,6 +21,25 @@ function source(value, host) {
 }
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 function counter(env) { return env.DOWNLOADS.get(env.DOWNLOADS.idFromName("sheepterm-downloads-v1")); }
+// GitHub's own counters: every download of a release asset (site links, in-app updates, direct). No dates, no people.
+const GH_REPOS = { mac: "SheepTerm", windows: "SheepTerm-Windows", linux: "SheepTerm-Linux" };
+async function githubCounts() {
+  const out = {};
+  await Promise.all(Object.entries(GH_REPOS).map(async ([platform, repo]) => {
+    try {
+      const r = await fetch("https://api.github.com/repos/bestonehxh/" + repo + "/releases?per_page=100", {
+        headers: { "Accept": "application/vnd.github+json", "User-Agent": "SheepTerm-Downloads" }, cf: { cacheTtl: 300, cacheEverything: true }
+      });
+      if (!r.ok) throw new Error("github");
+      const releases = (await r.json()).map(rel => ({
+        tag: String(rel.tag_name || ""), published: String(rel.published_at || "").slice(0, 10),
+        count: (rel.assets || []).reduce((n, a) => n + (Number(a.download_count) || 0), 0)
+      }));
+      out[platform] = { total: releases.reduce((n, r) => n + r.count, 0), releases };
+    } catch { out[platform] = null; }
+  }));
+  return out;
+}
 async function hash(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(x => x.toString(16).padStart(2, '0')).join(''); }
 // HTML form POSTs under no-referrer send Origin: null, which conflicts with
 // the strict same-origin CSRF check. Keep referrers within our own origin.
@@ -92,8 +111,12 @@ export default {
       if (!await authorized(request, env)) return json({ error: 'Sign in required' }, 401);
       const days = [7, 30, 90].includes(Number(url.searchParams.get("days"))) ? Number(url.searchParams.get("days")) : 30;
       try {
-        const result = await counter(env).fetch("https://counter/stats?days=" + days);
-        const response = new Response(result.body, result);
+        const github = await githubCounts();
+        const snapshot = Object.fromEntries(Object.entries(github).filter(([, v]) => v).map(([k, v]) => [k, v.total]));
+        await counter(env).fetch("https://counter/github", { method: "POST", body: JSON.stringify(snapshot) });
+        const report = await (await counter(env).fetch("https://counter/stats?days=" + days)).json();
+        report.github = github;
+        const response = json(report);
         for (const [key, value] of Object.entries(privateHeaders())) response.headers.set(key, value);
         return response;
       } catch { return json({ error: "Download statistics are temporarily unavailable." }, 503); }
@@ -132,9 +155,11 @@ export default {
         medium: clean(url.searchParams.get("utm_medium"), "none"), campaign: clean(url.searchParams.get("utm_campaign"), "none"),
         placement: clean(url.searchParams.get("placement"), "link"),
         country: /^[A-Z]{2}$/.test(request.cf?.country || "") ? request.cf.country : "XX",
-        test: url.searchParams.get("utm_source") === "test"
+        test: url.searchParams.get("utm_source") === "test",
+        // One-way digest of address + browser, never stored: the counter re-keys it with a secret that changes every 30 days.
+        fp: await hash((request.headers.get("CF-Connecting-IP") || "") + "\n" + (request.headers.get("User-Agent") || ""))
       };
-      // Do not log URLs, IPs or full referrers. Only aggregate dimensions enter storage.
+      // Do not log URLs, IPs or full referrers. Storage keeps the aggregates, plus per-download rows with a 30-day visitor code.
       ctx.waitUntil(counter(env).fetch("https://counter/record", { method: "POST", body: JSON.stringify(event) }).then(r => {
         if (!r.ok) throw new Error("counter unavailable");
       }).catch(() => console.error("download_counter_write_failed")));
@@ -160,9 +185,35 @@ export class DownloadCounter {
     this.sql.exec("CREATE TABLE IF NOT EXISTS public_reports (report_id INTEGER PRIMARY KEY)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS report_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)");
     this.sql.exec("INSERT OR IGNORE INTO metadata VALUES ('started_at', ?)", new Date().toISOString());
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, day TEXT NOT NULL,
+      platform TEXT, version TEXT, source TEXT, placement TEXT, country TEXT, visitor TEXT, test INTEGER)`);
+    this.sql.exec("CREATE INDEX IF NOT EXISTS events_day ON events(day)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS github_daily (day TEXT, platform TEXT, total INTEGER NOT NULL, PRIMARY KEY(day, platform))");
+    const secret = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(x => x.toString(16).padStart(2, "0")).join("");
+    this.sql.exec("INSERT OR IGNORE INTO metadata VALUES ('visitor_secret', ?)", secret);
+  }
+  // Visitor code: HMAC(secret + 30-day period, fingerprint digest), 10 hex chars. The same browser on the same address
+  // gets the same code inside one 30-day period; a new period gives every visitor a new code.
+  async visitor(fp, now = Date.now()) {
+    if (!/^[a-f0-9]{64}$/.test(fp || "")) return null;
+    const secret = this.sql.exec("SELECT value FROM metadata WHERE key = 'visitor_secret'").one().value;
+    const period = Math.floor(now / 86400000 / 30);
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret + ":" + period), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(fp)));
+    return Array.from(mac.slice(0, 5)).map(x => x.toString(16).padStart(2, "0")).join("");
   }
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/github" && request.method === "POST") {
+      const totals = await request.json();
+      const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+      for (const [platform, total] of Object.entries(totals || {})) {
+        if (!(platform in GH_REPOS) || !Number.isFinite(total)) continue;
+        this.sql.exec("INSERT INTO github_daily VALUES (?, ?, ?) ON CONFLICT(day, platform) DO UPDATE SET total = MAX(total, excluded.total)", day, platform, Math.floor(total));
+      }
+      this.sql.exec("DELETE FROM github_daily WHERE day < date(?, '-89 days')", day);
+      return json({ ok: true });
+    }
     if (url.pathname.startsWith('/session/')) {
       const tokenHash = url.pathname.slice('/session/'.length);
       if (!/^[a-f0-9]{64}$/.test(tokenHash)) return json({ error: 'invalid session' }, 400);
@@ -189,8 +240,11 @@ export class DownloadCounter {
       this.sql.exec(`INSERT INTO counts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(day, platform, version, source, medium, campaign, placement, country, test)
         DO UPDATE SET count = count + 1`, day, e.platform, e.version, e.source, e.medium, e.campaign, e.placement, e.country, e.test ? 1 : 0);
-      // Bound storage to 90 calendar days; no per-person event records are retained.
+      this.sql.exec("INSERT INTO events (ts, day, platform, version, source, placement, country, visitor, test) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        new Date().toISOString(), day, e.platform, e.version, e.source, e.placement, e.country, await this.visitor(e.fp), e.test ? 1 : 0);
+      // Bound storage to 90 calendar days. No address, browser string or digest of them is stored, only the visitor code.
       this.sql.exec("DELETE FROM counts WHERE day < date(?, '-89 days')", day);
+      this.sql.exec("DELETE FROM events WHERE day < date(?, '-89 days')", day);
       return json({ ok: true });
     }
     if (url.pathname !== "/stats") return new Response("Not found", { status: 404 });
@@ -205,7 +259,16 @@ export class DownloadCounter {
       total: this.sql.exec(`SELECT COALESCE(SUM(count), 0) AS total FROM counts ${where}`, ...args).one().total,
       test_requests: this.sql.exec("SELECT COALESCE(SUM(count), 0) AS total FROM counts WHERE test = 1").one().total,
       platforms: group("platform"), versions: group("platform, version"), sources: group("source"),
-      countries: group("country"), campaigns: group("source, medium, campaign"), placements: group("placement"), daily: group("day")
+      countries: group("country"), campaigns: group("source, medium, campaign"), placements: group("placement"),
+      // newest day first; visitors = distinct visitor codes that day (rows recorded before codes existed have none)
+      daily: this.sql.exec(`SELECT c.day, SUM(c.count) AS count, (SELECT COUNT(DISTINCT visitor) FROM events e WHERE e.day = c.day AND e.test = 0) AS visitors
+        FROM counts c ${where.replace("WHERE test", "WHERE c.test").replace("AND day", "AND c.day")} GROUP BY c.day ORDER BY c.day DESC`, ...args).toArray(),
+      visitors: this.sql.exec(`SELECT COUNT(DISTINCT visitor) AS n FROM events ${where}`, ...args).one().n,
+      events_since: this.sql.exec("SELECT MIN(ts) AS ts FROM events").one().ts,
+      recent: this.sql.exec(`SELECT ts, platform, version, country, source, placement, visitor,
+        (SELECT COUNT(*) FROM events b WHERE b.visitor = a.visitor AND b.test = 0 AND b.day >= date(?, ?)) AS times
+        FROM events a ${where} ORDER BY id DESC LIMIT 300`, ...args, ...args).toArray(),
+      github_daily: this.sql.exec("SELECT day, platform, total FROM github_daily ORDER BY day DESC, platform").toArray()
     });
   }
 }
