@@ -74,6 +74,21 @@ document.querySelectorAll("a[data-quick]").forEach(function(a){
 
 // version text: always the latest release (the static text is only the fallback)
 document.querySelectorAll("[data-ver]").forEach(function(e){release(e.dataset.ver).then(function(r){e.textContent=r.v}).catch(function(){})});
+// star count on Star on GitHub buttons: the button works without it; kept 10 minutes per tab to spare the API's hourly limit
+(function(){var by={};
+ document.querySelectorAll("[data-stars]").forEach(function(a){(by[a.dataset.stars]=by[a.dataset.stars]||[]).push(a)});
+ function k(n){return n<1000?String(n):(n/1000).toFixed(n<10000?1:0).replace(/\.0$/,"")+"k"}
+ function show(list,n){list.forEach(function(a){var c=a.querySelector(".sc");if(!c)return;c.textContent=k(n);c.hidden=false;
+  a.setAttribute("aria-label","Star "+a.dataset.stars+" on GitHub, "+n+" star"+(n===1?"":"s"))})}
+ Object.keys(by).forEach(function(repo){var key="sheepterm-stars-"+repo,hit=null;
+  try{hit=JSON.parse(sessionStorage.getItem(key)||"null")}catch(e){}
+  if(hit&&Date.now()-hit.t<600000){show(by[repo],hit.n);return}
+  fetch(API+repo,{headers:{Accept:"application/vnd.github+json"}}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
+   if(typeof j.stargazers_count!=="number")throw 0;show(by[repo],j.stargazers_count);
+   try{sessionStorage.setItem(key,JSON.stringify({n:j.stargazers_count,t:Date.now()}))}catch(e){}
+  }).catch(function(){});
+ });
+})();
 // phone nav menu
 (function(){var n=document.querySelector(".nav"),b=n&&n.querySelector(".menu");if(!b)return;
  b.addEventListener("click",function(){var o=n.classList.toggle("open");b.setAttribute("aria-expanded",o?"true":"false")})})();
