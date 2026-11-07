@@ -4,7 +4,15 @@ const TARGETS = {
   mac: { repo: "SheepTerm", pattern: /\.dmg$/i },
   windows: { repo: "SheepTerm-Windows", pattern: /\.zip$/i },
   linux: { repo: "SheepTerm-Linux", pattern: /linux-x86_64\.(?:AppImage|tar\.gz)$/i },
-  "linux-arm64": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.(?:AppImage|tar\.gz)$/i }
+  "linux-arm64": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.(?:AppImage|tar\.gz)$/i },
+  "linux-appimage": { repo: "SheepTerm-Linux", pattern: /linux-x86_64\.AppImage$/i },
+  "linux-arm64-appimage": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.AppImage$/i },
+  "linux-deb": { repo: "SheepTerm-Linux", pattern: /linux-amd64\.deb$/i },
+  "linux-arm64-deb": { repo: "SheepTerm-Linux", pattern: /linux-arm64\.deb$/i },
+  "linux-rpm": { repo: "SheepTerm-Linux", pattern: /linux-x86_64\.rpm$/i },
+  "linux-arm64-rpm": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.rpm$/i },
+  "linux-tar": { repo: "SheepTerm-Linux", pattern: /linux-x86_64\.tar\.gz$/i },
+  "linux-arm64-tar": { repo: "SheepTerm-Linux", pattern: /linux-aarch64\.tar\.gz$/i }
 };
 const clean = (value, fallback = "unknown") => /^[a-z0-9_.-]{1,64}$/i.test(value || "") ? value.toLowerCase() : fallback;
 function refHost(value) {

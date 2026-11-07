@@ -124,6 +124,43 @@ test('Linux downloads select the requested architecture and prefer a single-file
   } finally { globalThis.fetch = realFetch; }
 });
 
+test('Linux downloads support all package formats for x86_64 and ARM64', async () => {
+  const realFetch = globalThis.fetch;
+  const repo = 'https://github.com/bestonehxh/SheepTerm-Linux/releases/download/v0.1-5/';
+  const assets = [
+    'SheepTerm-0.1-5-linux-amd64.deb',
+    'SheepTerm-0.1-5-linux-arm64.deb',
+    'SheepTerm-0.1-5-linux-x86_64.rpm',
+    'SheepTerm-0.1-5-linux-aarch64.rpm',
+    'SheepTerm-0.1-5-linux-x86_64.AppImage',
+    'SheepTerm-0.1-5-linux-aarch64.AppImage',
+    'SheepTerm-0.1-5-linux-x86_64.tar.gz',
+    'SheepTerm-0.1-5-linux-aarch64.tar.gz'
+  ];
+  globalThis.fetch = async () => Response.json({ tag_name: 'v0.1-5', assets: assets.map(name => ({ name, browser_download_url: repo + name })) });
+  const env = { DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: async () => Response.json({ ok: true }) }) } };
+  const ctx = { waitUntil() {} };
+  const expected = [
+    ['linux', 'SheepTerm-0.1-5-linux-x86_64.AppImage'],
+    ['linux-arm64', 'SheepTerm-0.1-5-linux-aarch64.AppImage'],
+    ['linux-appimage', 'SheepTerm-0.1-5-linux-x86_64.AppImage'],
+    ['linux-arm64-appimage', 'SheepTerm-0.1-5-linux-aarch64.AppImage'],
+    ['linux-deb', 'SheepTerm-0.1-5-linux-amd64.deb'],
+    ['linux-arm64-deb', 'SheepTerm-0.1-5-linux-arm64.deb'],
+    ['linux-rpm', 'SheepTerm-0.1-5-linux-x86_64.rpm'],
+    ['linux-arm64-rpm', 'SheepTerm-0.1-5-linux-aarch64.rpm'],
+    ['linux-tar', 'SheepTerm-0.1-5-linux-x86_64.tar.gz'],
+    ['linux-arm64-tar', 'SheepTerm-0.1-5-linux-aarch64.tar.gz']
+  ];
+  try {
+    for (const [route, expectedName] of expected) {
+      const res = await worker.fetch(new Request('https://sheepterm.com/download/' + route), env, ctx);
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.get('Location'), repo + expectedName);
+    }
+  } finally { globalThis.fetch = realFetch; }
+});
+
 test('each counted download keeps its time and a 30-day visitor code, never the address', async () => {
   const counter = new DownloadCounter({ storage: { sql: sqlStore() } });
   const ip = '198.51.100.23', ua = 'Mozilla/5.0 Safari';

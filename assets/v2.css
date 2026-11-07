@@ -110,6 +110,14 @@ h2{font-size:clamp(30px,4.2vw,44px);line-height:1.1;letter-spacing:-.028em;margi
 .plat .ver{font-family:var(--mono);font-size:13px;color:var(--ac2);min-height:20px}
 .plat ul{list-style:none;margin:10px 0 22px;padding:0;color:var(--mu);font-size:14px;display:grid;gap:6px;flex:1;align-content:start}
 .plat .btn{justify-content:center;width:100%}
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lgrid .btn{padding:0 8px;font-size:13.5px;gap:6px}
+.lgrid .btn small{font-size:11px;font-weight:400;opacity:.75}
+.ltypes{display:grid;gap:6px;margin-top:8px}
+.ltypes .lrow{display:flex;align-items:center;gap:4px}
+.ltypes .lbl{font-family:var(--mono);font-size:11px;color:var(--mu2);width:46px;flex:none;letter-spacing:-.02em}
+.pbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;height:24px;padding:0 4px;border-radius:6px;font-family:var(--mono);font-size:11px;color:var(--mu);background:rgba(255,255,255,.04);border:1px solid var(--line2);text-decoration:none;transition:all .15s}
+.pbtn:hover{color:var(--tx);background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.24);text-decoration:none;transform:translateY(-1px)}
 .plat .alt{font-size:13px;color:var(--mu2);margin-top:10px;text-align:center;line-height:1.5;min-height:3em;min-height:2lh}
 .plat .alt a{color:var(--mu)}
 .free{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;margin-top:36px;color:var(--mu);font-size:14px}

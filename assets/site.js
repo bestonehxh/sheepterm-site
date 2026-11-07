@@ -10,7 +10,7 @@ try{
  sessionStorage.setItem("sheepterm-attribution",JSON.stringify(attribution));
 }catch(e){}
 function trackedLink(a,repo,tag){
- var platform=repo==="SheepTerm"?"mac":repo==="SheepTerm-Windows"?"windows":repo==="SheepTerm-Linux"?(/aarch64/.test(a.dataset.asset||"")?"linux-arm64":"linux"):"";
+ var platform=a.dataset.route||(repo==="SheepTerm"?"mac":repo==="SheepTerm-Windows"?"windows":repo==="SheepTerm-Linux"?(/aarch64|arm64/.test(a.dataset.asset||"")?"linux-arm64":"linux"):"");
  if(!platform)return null;
  var u=new URL("/download/"+platform,location.origin);
  Object.keys(attribution).forEach(function(k){if(["utm_source","utm_medium","utm_campaign","ref"].indexOf(k)>=0)u.searchParams.set(k,attribution[k])});
