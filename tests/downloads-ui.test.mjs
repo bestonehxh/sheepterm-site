@@ -19,6 +19,7 @@ test('Linux install instructions explain the executable permission and data migr
   assert.match(html, /existing <code>Data<\/code> folder beside the AppImage/);
   assert.match(html, /sudo apt install \.\/SheepTerm-\*-linux-\*\.deb/);
   assert.match(html, /sudo dnf install \.\/SheepTerm-\*-linux-\*\.rpm/);
+  assert.match(html, /Help ▸ Check for Updates…/);
 });
 
 test('Linux download options include every package format for x86_64 and ARM64', () => {
