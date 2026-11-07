@@ -110,7 +110,7 @@ h2{font-size:clamp(30px,4.2vw,44px);line-height:1.1;letter-spacing:-.028em;margi
 .plat .ver{font-family:var(--mono);font-size:13px;color:var(--ac2);min-height:20px}
 .plat ul{list-style:none;margin:10px 0 22px;padding:0;color:var(--mu);font-size:14px;display:grid;gap:6px;flex:1;align-content:start}
 .plat .btn{justify-content:center;width:100%}
-.plat .alt{font-size:13px;color:var(--mu2);margin-top:10px;text-align:center}
+.plat .alt{font-size:13px;color:var(--mu2);margin-top:10px;text-align:center;line-height:1.5;min-height:3em;min-height:2lh}
 .plat .alt a{color:var(--mu)}
 .free{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;margin-top:36px;color:var(--mu);font-size:14px}
 .free span::before{content:"✓";color:var(--ac2);margin-right:8px;font-weight:700}
