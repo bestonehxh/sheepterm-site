@@ -304,3 +304,16 @@ test('only the signed-in owner can edit feedback and publish a reply', async () 
   assert.equal(reports[0].message,'Edited'); assert.equal(reports[0].reply,'We are looking into it.');
   assert.equal((await edit(cookie,{id:1,message:' ',reply:'x'})).status,400);
 });
+
+test('feature requests move to review above 20 votes without overriding later statuses', async () => {
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  count.sql.exec("INSERT INTO reports (created_at, message) VALUES ('2026-11-09', 'Feature')");
+  count.sql.exec('INSERT INTO public_reports VALUES (1)');
+  count.sql.exec("INSERT INTO feedback_details (report_id, type, status) VALUES (1, 'feature', 'open')");
+  const vote = async voter => (await count.fetch(new Request('https://counter/vote', {method:'POST',body:JSON.stringify({id:1,voter,key:'limit'})}))).json();
+  for(let i=0;i<20;i++) assert.equal((await vote('user'+i)).status,'open');
+  assert.equal((await vote('user20')).status,'under-review');
+  assert.equal((await vote('user20')).status,'under-review');
+  count.sql.exec("UPDATE feedback_details SET status = 'planned' WHERE report_id = 1");
+  assert.equal((await vote('user21')).status,'planned');
+});

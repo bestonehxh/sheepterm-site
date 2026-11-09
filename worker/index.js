@@ -162,7 +162,7 @@ export default {
       if (request.method !== 'POST' || request.headers.get('Origin') !== url.origin || !await authorized(request, env)) return json({ error: 'Forbidden' }, 403);
       try {
         const input = await request.json();
-        if (!Number.isSafeInteger(input.id) || !['open', 'planned', 'in-progress', 'completed', 'closed'].includes(input.status)) return json({ error: 'Invalid status' }, 400);
+        if (!Number.isSafeInteger(input.id) || !['open', 'under-review', 'planned', 'in-progress', 'completed', 'closed'].includes(input.status)) return json({ error: 'Invalid status' }, 400);
         return await counter(env).fetch('https://counter/status', { method: 'POST', body: JSON.stringify(input) });
       } catch { return json({ error: 'Unable to update status' }, 400); }
     }
@@ -351,7 +351,9 @@ export class DownloadCounter {
       if (exists) this.sql.exec('DELETE FROM feedback_votes WHERE report_id = ? AND voter = ?', id, voter);
       else this.sql.exec('INSERT INTO feedback_votes (report_id, voter) VALUES (?, ?)', id, voter);
       const votes = this.sql.exec('SELECT COUNT(*) AS count FROM feedback_votes WHERE report_id = ?', id).one().count;
-      return json({ votes, voted: !exists });
+      if (votes > 20) this.sql.exec("UPDATE feedback_details SET status = 'under-review' WHERE report_id = ? AND type = 'feature' AND status = 'open'", id);
+      const status = this.sql.exec("SELECT COALESCE((SELECT status FROM feedback_details WHERE report_id = ?), 'open') AS status", id).one().status;
+      return json({ votes, voted: !exists, status });
     }
     if (url.pathname === '/feedback-edit' && request.method === 'POST') {
       const { id, message, reply } = await request.json();
