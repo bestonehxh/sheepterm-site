@@ -4,7 +4,7 @@
   try{
     var response=await fetch('/api/reports',{cache:'no-store'});if(!response.ok)throw Error();var data=await response.json();status.textContent=data.reports.length?'Choose a report to update. Replies are public for public posts.':'No feedback yet.';
     data.reports.forEach(function(report){
-      var item=el('article'), header=el('time',(report.type==='feature'?'Feature request · ':'Problem report · ')+new Date(report.created_at).toLocaleString()), form=el('form'), messageLabel=el('label','Post'),message=el('textarea'),replyLabel=el('label','Public reply from SheepTerm'),reply=el('textarea'), selectLabel=el('label','Status'),select=el('select'), save=el('button','Save changes'),note=el('p');
+      var item=el('article'), header=el('time','#'+report.id+' · '+(report.type==='feature'?'Feature request · ':'Problem report · ')+new Date(report.created_at).toLocaleString()), form=el('form'), messageLabel=el('label','Post'),message=el('textarea'),replyLabel=el('label','Public reply from SheepTerm'),reply=el('textarea'), selectLabel=el('label','Status'),select=el('select'), save=el('button','Save changes'),note=el('p');
       message.value=report.message;message.required=true;message.maxLength=3000;message.rows=3;messageLabel.append(message);
       reply.value=report.reply||'';reply.maxLength=3000;reply.rows=3;replyLabel.append(reply);
       Object.entries(labels).forEach(function(pair){var option=el('option',pair[1]);option.value=pair[0];select.append(option)});select.value=report.status;selectLabel.append(select);
