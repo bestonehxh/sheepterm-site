@@ -1,28 +1,9 @@
-(function () {
-  var form = document.getElementById('report-form'), status = document.getElementById('report-status'), button = form.querySelector('button');
-  var list = document.getElementById('reports-list'), listStatus = document.getElementById('reports-status');
-  async function loadReports() {
-    try {
-      var response = await fetch('/api/public-reports', {cache: 'no-store'});
-      if (!response.ok) throw new Error();
-      var data = await response.json(); list.replaceChildren();
-      listStatus.textContent = data.reports.length ? 'Most recent reports' : 'No public reports yet.';
-      data.reports.forEach(function (report) {
-        var item = document.createElement('article'), time = document.createElement('time'), message = document.createElement('p');
-        time.textContent = new Date(report.created_at).toLocaleString(); message.textContent = report.message;
-        item.append(time, message); list.append(item);
-      });
-    } catch (error) { listStatus.textContent = 'Could not load reports. Please refresh the page.'; }
-  }
-  form.addEventListener('submit', async function (event) {
-    event.preventDefault(); button.disabled = true; status.textContent = 'Sending…';
-    try {
-      var response = await fetch('/api/reports', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({message: form.elements.message.value})});
-      var result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Please try again.');
-      form.reset(); status.textContent = 'Thank you! Your report has been posted.'; await loadReports();
-    } catch (error) { status.textContent = 'Could not send your report. ' + (error.message || 'Please try again.'); }
-    finally { button.disabled = false; }
-  });
-  loadReports();
+(function(){
+  var form=document.getElementById('report-form'), status=document.getElementById('report-status'), list=document.getElementById('reports-list'), note=document.getElementById('reports-status'), sort=document.getElementById('sort'), filter='all', reports=[];
+  var labels={open:'Open',planned:'Planned','in-progress':'In progress',completed:'Completed',closed:'Closed'};
+  var voter; try { voter=localStorage.getItem('sheepterm-feedback-voter'); if(!/^[a-f0-9]{64}$/.test(voter||'')){voter=Array.from(crypto.getRandomValues(new Uint8Array(32)),function(x){return x.toString(16).padStart(2,'0')}).join('');localStorage.setItem('sheepterm-feedback-voter',voter)} } catch(e) { voter=null; }
+  function render(){list.replaceChildren();var items=reports.filter(function(r){return filter==='all'||r.type===filter});items.sort(sort.value==='newest'?function(a,b){return b.id-a.id}:function(a,b){return b.votes-a.votes||b.id-a.id});note.textContent=items.length?items.length+' '+(items.length===1?'post':'posts'):'No feedback here yet. Be the first to share.';items.forEach(function(r){var item=document.createElement('article'), vote=document.createElement('button'), arrow=document.createElement('span'), count=document.createElement('span'), entry=document.createElement('div'), meta=document.createElement('div'), type=document.createElement('span'), state=document.createElement('span'), date=document.createElement('time'), message=document.createElement('p');vote.className='vote';vote.type='button';vote.setAttribute('aria-label','Vote for feedback');vote.setAttribute('aria-pressed',String(Boolean(r.voted)));arrow.textContent='▲';count.textContent=r.votes;vote.append(arrow,count);vote.addEventListener('click',async function(){if(!voter){note.textContent='Please enable browser storage to vote.';return}vote.disabled=true;try{var response=await fetch('/api/feedback-vote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id,voter:voter})});var result=await response.json();if(!response.ok)throw Error(result.error);r.votes=result.votes;r.voted=result.voted;try{localStorage.setItem('sheepterm-vote-'+r.id,String(r.voted))}catch(e){}render()}catch(e){note.textContent='Could not save your vote. Please try again.'}finally{vote.disabled=false}});entry.className='entry';meta.className='meta';type.className='tag '+(r.type==='bug'?'bug':'');type.textContent=r.type==='feature'?'Feature request':'Problem report';state.className='tag state';state.textContent=labels[r.status]||'Open';date.textContent=new Date(r.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});message.textContent=r.message;meta.append(type,state,date);entry.append(meta,message);item.append(vote,entry);list.append(item)})}
+  async function load(){try{var response=await fetch('/api/public-reports',{cache:'no-store'});if(!response.ok)throw Error();var data=await response.json();reports=data.reports.map(function(r){try{r.voted=localStorage.getItem('sheepterm-vote-'+r.id)==='true'}catch(e){}return r});render()}catch(e){note.textContent='Could not load feedback. Please refresh the page.'}}
+  document.querySelectorAll('[data-filter]').forEach(function(b){b.addEventListener('click',function(){filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(function(x){x.classList.toggle('active',x===b)});render()})});sort.addEventListener('change',render);
+  form.addEventListener('submit',async function(e){e.preventDefault();var button=form.querySelector('button');button.disabled=true;status.textContent='Posting…';try{var response=await fetch('/api/reports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:form.elements.message.value,type:form.elements.type.value})});var result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');form.reset();status.textContent='Thank you! Your feedback is on the board.';await load()}catch(e){status.textContent='Could not post feedback. '+e.message}finally{button.disabled=false}});load();
 }());

@@ -235,3 +235,25 @@ test('the stats API adds GitHub release counters and keeps one running total per
     assert.equal(data.github_daily.find(r => r.platform === 'mac').total, 26);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('community feedback supports votes and owner-only status updates', async () => {
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const env = { STATS_PASSWORD_SHA256: createHash('sha256').update('secret').digest('hex'), DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) } };
+  const ctx = { waitUntil() {} }, req = (path, options) => new Request('https://sheepterm.com' + path, options);
+  const post = (path, body, cookie = '') => worker.fetch(req(path, { method: 'POST', headers: { Origin: 'https://sheepterm.com', 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1', Cookie: cookie }, body: JSON.stringify(body) }), env, ctx);
+  assert.equal((await post('/api/reports', { message: 'Add RDP', type: 'feature' })).status, 200);
+  let board = (await (await worker.fetch(req('/api/public-reports'), env, ctx)).json()).reports;
+  assert.equal(board[0].type, 'feature'); assert.equal(board[0].status, 'open');
+  const id = board[0].id, voter = 'a'.repeat(64);
+  assert.equal((await (await post('/api/feedback-vote', { id, voter })).json()).votes, 1);
+  assert.equal((await (await post('/api/feedback-vote', { id, voter })).json()).votes, 0);
+  assert.equal((await post('/api/feedback-status', { id, status: 'planned' })).status, 403);
+  const login = await worker.fetch(req('/download-stats/login', { method:'POST', headers:{Origin:'https://sheepterm.com', 'Content-Type':'application/x-www-form-urlencoded'}, body:'password=secret' }), env, ctx);
+  const cookie = login.headers.get('Set-Cookie').split(';')[0];
+  assert.equal((await post('/api/feedback-status', { id, status: 'in-progress' }, cookie)).status, 200);
+  board = (await (await worker.fetch(req('/api/public-reports'), env, ctx)).json()).reports;
+  assert.equal(board[0].status, 'in-progress'); assert.equal(board[0].votes, 0);
+  assert.equal((await post('/api/feedback-status', { id, status: 'fake' }, cookie)).status, 400);
+  for (let i = 0; i < 58; i++) assert.equal((await post('/api/feedback-vote', { id, voter })).status, 200);
+  assert.equal((await post('/api/feedback-vote', { id, voter })).status, 429);
+});

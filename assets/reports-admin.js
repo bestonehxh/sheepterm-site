@@ -1,13 +1,1 @@
-(async function () {
-  var status = document.getElementById('status'), container = document.getElementById('reports');
-  try {
-    var response = await fetch('/api/reports', {cache: 'no-store'});
-    if (!response.ok) throw new Error();
-    var data = await response.json(); status.textContent = data.reports.length ? 'Latest reports' : 'No reports yet.';
-    data.reports.forEach(function (report) {
-      var item = document.createElement('article'), time = document.createElement('time'), message = document.createElement('p');
-      time.textContent = new Date(report.created_at).toLocaleString(); message.textContent = report.message;
-      item.append(time, message); container.append(item);
-    });
-  } catch (e) { status.textContent = 'Could not load reports. Please refresh the page.'; }
-}());
+(async function(){var status=document.getElementById('status'),container=document.getElementById('reports'),labels={open:'Open',planned:'Planned','in-progress':'In progress',completed:'Completed',closed:'Closed'};try{var response=await fetch('/api/reports',{cache:'no-store'});if(!response.ok)throw Error();var data=await response.json();status.textContent=data.reports.length?'Latest feedback':'No feedback yet.';data.reports.forEach(function(report){var item=document.createElement('article'),time=document.createElement('time'),message=document.createElement('p'),select=document.createElement('select'),note=document.createElement('p');time.textContent=(report.type==='feature'?'Feature request · ':'Problem report · ')+new Date(report.created_at).toLocaleString();message.textContent=report.message;Object.entries(labels).forEach(function(pair){var option=document.createElement('option');option.value=pair[0];option.textContent=pair[1];select.append(option)});select.value=report.status;select.setAttribute('aria-label','Feedback status');select.addEventListener('change',async function(){select.disabled=true;note.textContent='Saving…';try{var r=await fetch('/api/feedback-status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:report.id,status:select.value})});if(!r.ok)throw Error();report.status=select.value;note.textContent='Saved.'}catch(e){select.value=report.status;note.textContent='Could not save.'}finally{select.disabled=false}});item.append(time,message,select,note);container.append(item)})}catch(e){status.textContent='Could not load feedback. Please refresh the page.'}}());
