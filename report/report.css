@@ -2,3 +2,5 @@
 .feedback-wrap .board{padding:0}.nav nav{display:flex;gap:20px;margin-left:auto}.nav nav a{color:#a9b2c0;text-decoration:none;font-size:14px}.nav nav a:hover{color:#fff}
 
 .admin-reply{margin-top:14px;padding:12px 14px;border-left:2px solid #8fa9f8;background:#1d2430;border-radius:0 8px 8px 0;color:#abb6cb;font-size:13px}.admin-reply strong{color:#c2cfff}.admin-reply p{margin:5px 0 0;font-size:14px}
+
+.vote{flex:0 0 90px;min-height:64px;border:1px solid #879ce0;background:#283550;color:#d9e2ff;padding:9px 10px;font:700 13px Manrope,sans-serif;transition:background .15s,border-color .15s,transform .15s}.vote span+span{margin-top:4px;font-size:12px;font-weight:500;color:#bac8e9}.vote:hover{background:#354970;border-color:#b5c4ff}.vote:focus-visible{outline:3px solid #d1dcff;outline-offset:3px}.vote[aria-pressed=true]{background:#b0c2ff;border-color:#b0c2ff;color:#172035}.vote[aria-pressed=true] span+span{color:#344263}.vote:disabled{opacity:.6;cursor:wait}@media(max-width:700px){.vote{flex-basis:76px;padding:9px 5px;font-size:12px}}
