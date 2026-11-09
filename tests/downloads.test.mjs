@@ -92,7 +92,9 @@ test('problem reports accept messages and are visible only to signed-in owner', 
   const count = new DownloadCounter({ storage: { sql: sqlStore() } });
   const env = { STATS_PASSWORD_SHA256: createHash('sha256').update('secret').digest('hex'), DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) }, ASSETS: { fetch: async () => new Response('asset') } };
   const ctx = { waitUntil() {} }, req = (path, options) => new Request('https://sheepterm.com' + path, options);
-  const send = (message, origin = 'https://sheepterm.com') => worker.fetch(req('/api/reports', {method:'POST', headers:{Origin:origin, 'Content-Type':'application/json', 'CF-Connecting-IP':'192.0.2.1'}, body:JSON.stringify({message})}), env, ctx);
+  const sessionToken = 'b'.repeat(64);
+  count.sql.exec('INSERT INTO community_sessions VALUES (?, ?, ?)', createHash('sha256').update(sessionToken).digest('hex'), 'c'.repeat(64), Date.now() + 60000);
+  const send = (message, origin = 'https://sheepterm.com') => worker.fetch(req('/api/reports', {method:'POST', headers:{Origin:origin, 'Content-Type':'application/json', 'CF-Connecting-IP':'192.0.2.1', Cookie: '__Host-sheepterm_community=' + sessionToken}, body:JSON.stringify({message})}), env, ctx);
   assert.equal((await send('Problem on Linux', 'https://evil.example')).status, 403);
   assert.equal((await send('  ')).status, 400);
   count.sql.exec("INSERT INTO reports (created_at, message) VALUES ('2026-01-01', 'Old private report')");
@@ -240,7 +242,12 @@ test('community feedback supports votes and owner-only status updates', async ()
   const count = new DownloadCounter({ storage: { sql: sqlStore() } });
   const env = { STATS_PASSWORD_SHA256: createHash('sha256').update('secret').digest('hex'), DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) } };
   const ctx = { waitUntil() {} }, req = (path, options) => new Request('https://sheepterm.com' + path, options);
-  const post = (path, body, cookie = '') => worker.fetch(req(path, { method: 'POST', headers: { Origin: 'https://sheepterm.com', 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1', Cookie: cookie }, body: JSON.stringify(body) }), env, ctx);
+  const sessionToken = 'd'.repeat(64);
+  count.sql.exec('INSERT INTO community_sessions VALUES (?, ?, ?)', createHash('sha256').update(sessionToken).digest('hex'), 'e'.repeat(64), Date.now() + 60000);
+  const communityCookie = '__Host-sheepterm_community=' + sessionToken;
+  const post = (path, body, cookie = communityCookie) => worker.fetch(req(path, { method: 'POST', headers: { Origin: 'https://sheepterm.com', 'Content-Type': 'application/json', 'CF-Connecting-IP': '192.0.2.1', Cookie: cookie }, body: JSON.stringify(body) }), env, ctx);
+  assert.equal((await post('/api/reports', {message:'no access'}, '')).status, 401);
+  assert.equal((await post('/api/feedback-vote', {id: 1}, '')).status, 401);
   assert.equal((await post('/api/reports', { message: 'Add RDP', type: 'feature' })).status, 200);
   let board = (await (await worker.fetch(req('/api/public-reports'), env, ctx)).json()).reports;
   assert.equal(board[0].type, 'feature'); assert.equal(board[0].status, 'open');
@@ -256,4 +263,28 @@ test('community feedback supports votes and owner-only status updates', async ()
   assert.equal((await post('/api/feedback-status', { id, status: 'fake' }, cookie)).status, 400);
   for (let i = 0; i < 58; i++) assert.equal((await post('/api/feedback-vote', { id, voter })).status, 200);
   assert.equal((await post('/api/feedback-vote', { id, voter })).status, 429);
+});
+
+test('Google sign-in checks state, creates a session, and logs out', async () => {
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const env = { GOOGLE_CLIENT_ID: 'test.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-secret', DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) } };
+  const ctx = {waitUntil() {}}, req = (path, options) => new Request('https://sheepterm.com' + path, options);
+  const start = await worker.fetch(req('/auth/google'), env, ctx);
+  const redirect = new URL(start.headers.get('Location'));
+  assert.equal(redirect.searchParams.get('scope'), 'openid');
+  assert.equal(redirect.searchParams.get('code_challenge_method'), 'S256');
+  const stateCookie = start.headers.get('Set-Cookie').split(';')[0], state = redirect.searchParams.get('state');
+  assert.equal((await worker.fetch(req('/auth/google/callback?state=wrong&code=abc', {headers:{Cookie:stateCookie}}), env, ctx)).status, 400);
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async url => String(url).includes('/token') ? Response.json({ access_token:'test-token' }) : Response.json({ sub:'test-google-user' });
+    const callback = await worker.fetch(req('/auth/google/callback?state=' + state + '&code=abc', {headers:{Cookie:stateCookie}}), env, ctx);
+    assert.equal(callback.status, 303);
+    const cookie = callback.headers.get('Set-Cookie').match(/__Host-sheepterm_community=[a-f0-9]+/)[0];
+    const session = await worker.fetch(req('/api/community-session', {headers:{Cookie:cookie}}), env, ctx);
+    assert.equal((await session.json()).signedIn, true);
+    assert.equal((await worker.fetch(req('/auth/logout', {method:'POST',headers:{Origin:'https://evil.example',Cookie:cookie}}), env, ctx)).status, 403);
+    assert.equal((await worker.fetch(req('/auth/logout', {method:'POST',headers:{Origin:'https://sheepterm.com',Cookie:cookie}}), env, ctx)).status, 303);
+    assert.equal((await (await worker.fetch(req('/api/community-session', {headers:{Cookie:cookie}}), env, ctx)).json()).signedIn, false);
+  } finally { globalThis.fetch = originalFetch; }
 });

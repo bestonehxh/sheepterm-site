@@ -61,9 +61,55 @@ async function authorized(request, env) {
   try { return (await counter(env).fetch('https://counter/session/' + await hash(token))).ok; } catch { return false; }
 }
 
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32))).map(x => x.toString(16).padStart(2, '0')).join('');
+function cookieValue(request, name) { return (request.headers.get('Cookie') || '').split(';').map(x => x.trim()).find(x => x.startsWith(name + '='))?.slice(name.length + 1) || ''; }
+async function communityUser(request, env) {
+  const token = cookieValue(request, '__Host-sheepterm_community');
+  if (!/^[a-f0-9]{64}$/.test(token)) return null;
+  try { const r = await counter(env).fetch('https://counter/community-session/' + await hash(token)); return r.ok ? await r.json() : null; } catch { return null; }
+}
+const communityCookie = (name, value, age, sameSite = 'Lax') => `${name}=${value}; Path=/; Max-Age=${age}; HttpOnly; Secure; SameSite=${sameSite}`;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === '/auth/google' && request.method === 'GET') {
+      if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return new Response('Google sign-in is not configured yet.', { status: 503, headers: privateHeaders() });
+      const state = randomToken(), verifier = randomToken();
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const google = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      google.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: url.origin + '/auth/google/callback', response_type: 'code', scope: 'openid', state, code_challenge: challenge, code_challenge_method: 'S256' }).toString();
+      return new Response(null, { status: 302, headers: { ...privateHeaders(), Location: google.toString(), 'Set-Cookie': communityCookie('__Host-sheepterm_oauth', state + '.' + verifier, 600) } });
+    }
+    if (url.pathname === '/auth/google/callback' && request.method === 'GET') {
+      const [state, verifier] = cookieValue(request, '__Host-sheepterm_oauth').split('.');
+      const code = url.searchParams.get('code');
+      if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !/^[a-f0-9]{64}$/.test(state || '') || !/^[a-f0-9]{64}$/.test(verifier || '') || state !== url.searchParams.get('state') || !code) return new Response('Sign-in failed. Please try again.', { status: 400, headers: privateHeaders() });
+      try {
+        const tokenResult = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: url.origin + '/auth/google/callback', grant_type: 'authorization_code', code_verifier: verifier }) });
+        if (!tokenResult.ok) throw Error('token');
+        const tokenData = await tokenResult.json();
+        if (!tokenData.access_token) throw Error('token');
+        const profileResult = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + tokenData.access_token } });
+        if (!profileResult.ok) throw Error('profile');
+        const profile = await profileResult.json();
+        if (typeof profile.sub !== 'string' || !profile.sub || profile.sub.length > 255) throw Error('profile');
+        const session = randomToken(), user = await hash('google:' + profile.sub);
+        const saved = await counter(env).fetch('https://counter/community-session/' + await hash(session), { method: 'POST', body: JSON.stringify({ user }) });
+        if (!saved.ok) throw Error('session');
+        const headers = new Headers({ ...privateHeaders(), Location: '/report/' });
+        headers.append('Set-Cookie', communityCookie('__Host-sheepterm_community', session, 604800));
+        headers.append('Set-Cookie', communityCookie('__Host-sheepterm_oauth', '', 0));
+        return new Response(null, { status: 303, headers });
+      } catch { return new Response('Sign-in is temporarily unavailable. Please try again.', { status: 503, headers: privateHeaders() }); }
+    }
+    if (url.pathname === '/api/community-session' && request.method === 'GET') return json({ signedIn: Boolean(await communityUser(request, env)) });
+    if (url.pathname === '/auth/logout' && request.method === 'POST') {
+      if (request.headers.get('Origin') !== url.origin) return json({ error: 'Forbidden' }, 403);
+      const token = cookieValue(request, '__Host-sheepterm_community');
+      if (/^[a-f0-9]{64}$/.test(token)) await counter(env).fetch('https://counter/community-session/' + await hash(token), { method: 'DELETE' });
+      return new Response(null, { status: 303, headers: { ...privateHeaders(), Location: '/report/', 'Set-Cookie': communityCookie('__Host-sheepterm_community', '', 0, 'Strict') } });
+    }
     if (url.pathname === '/download-stats/login' && request.method === 'POST') {
       if (request.headers.get('Origin') !== url.origin || Number(request.headers.get('Content-Length') || 0) > 2048) return new Response('Forbidden', { status: 403 });
       const form = await request.formData();
@@ -90,12 +136,15 @@ export default {
     }
     if (url.pathname === '/api/feedback-vote') {
       if (request.method !== 'POST' || request.headers.get('Origin') !== url.origin) return json({ error: 'Forbidden' }, 403);
+      const user = await communityUser(request, env);
+      if (!user) return json({ error: 'Sign in with Google to vote.' }, 401);
       try {
         if (Number(request.headers.get('Content-Length') || 0) > 1024) return json({ error: 'Request too large' }, 413);
         const input = await request.json();
         const ip = request.headers.get('CF-Connecting-IP');
         if (!ip) return json({ error: 'Voting temporarily unavailable' }, 503);
         input.key = await hash('vote:' + ip + ':' + new Date().toISOString().slice(0, 10));
+        input.voter = user.user;
         if (!Number.isSafeInteger(input.id) || input.id < 1 || !/^[a-f0-9]{64}$/.test(input.voter || '')) return json({ error: 'Invalid vote' }, 400);
         return await counter(env).fetch('https://counter/vote', { method: 'POST', body: JSON.stringify(input) });
       } catch { return json({ error: 'Unable to vote' }, 400); }
@@ -110,7 +159,7 @@ export default {
     }
     if (url.pathname === '/api/public-reports') {
       if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
-      try { return await counter(env).fetch('https://counter/public-reports'); }
+      try { const user = await communityUser(request, env); return await counter(env).fetch('https://counter/public-reports' + (user ? '?voter=' + user.user : '')); }
       catch { return json({ error: 'Reports unavailable' }, 503); }
     }
     if (url.pathname === '/api/reports') {
@@ -121,6 +170,7 @@ export default {
       }
       if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
       if (request.headers.get('Origin') !== url.origin) return json({ error: 'Forbidden' }, 403);
+      if (!await communityUser(request, env)) return json({ error: 'Sign in with Google to post.' }, 401);
       if (!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type') || '')) return json({ error: 'Invalid content type' }, 415);
       try {
         const reader = request.body.getReader(); let bytes = 0, chunks = [];
@@ -209,6 +259,7 @@ export class DownloadCounter {
     )`);
     this.sql.exec("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS community_sessions (hash TEXT PRIMARY KEY, user TEXT NOT NULL, expires INTEGER NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, message TEXT NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS public_reports (report_id INTEGER PRIMARY KEY)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS feedback_details (report_id INTEGER PRIMARY KEY, type TEXT NOT NULL DEFAULT 'bug', status TEXT NOT NULL DEFAULT 'open')");
@@ -244,6 +295,15 @@ export class DownloadCounter {
       this.sql.exec("DELETE FROM github_daily WHERE day < date(?, '-89 days')", day);
       return json({ ok: true });
     }
+    if (url.pathname.startsWith('/community-session/')) {
+      const tokenHash = url.pathname.slice('/community-session/'.length);
+      if (!/^[a-f0-9]{64}$/.test(tokenHash)) return json({ error: 'invalid session' }, 400);
+      this.sql.exec('DELETE FROM community_sessions WHERE expires < ?', Date.now());
+      if (request.method === 'POST') { const { user } = await request.json(); if (!/^[a-f0-9]{64}$/.test(user || '')) return json({ error: 'invalid user' }, 400); this.sql.exec('INSERT OR REPLACE INTO community_sessions VALUES (?, ?, ?)', tokenHash, user, Date.now() + 604800000); return json({ ok: true }); }
+      if (request.method === 'DELETE') { this.sql.exec('DELETE FROM community_sessions WHERE hash = ?', tokenHash); return json({ ok: true }); }
+      const row = this.sql.exec('SELECT user FROM community_sessions WHERE hash = ? AND expires > ?', tokenHash, Date.now()).toArray()[0];
+      return row ? json(row) : json({ error: 'expired' }, 401);
+    }
     if (url.pathname.startsWith('/session/')) {
       const tokenHash = url.pathname.slice('/session/'.length);
       if (!/^[a-f0-9]{64}$/.test(tokenHash)) return json({ error: 'invalid session' }, 400);
@@ -252,7 +312,10 @@ export class DownloadCounter {
       if (request.method === 'POST') { this.sql.exec('INSERT OR REPLACE INTO sessions VALUES (?, ?)', tokenHash, now + 86400000); return json({ ok: true }); }
       return this.sql.exec('SELECT hash FROM sessions WHERE hash = ? AND expires > ?', tokenHash, now).toArray().length ? json({ ok: true }) : json({ error: 'expired' }, 401);
     }
-    if (url.pathname === '/public-reports' && request.method === 'GET') return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status, (SELECT COUNT(*) FROM feedback_votes WHERE report_id = reports.id) AS votes FROM reports JOIN public_reports ON reports.id = public_reports.report_id LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 100`).toArray() });
+    if (url.pathname === '/public-reports' && request.method === 'GET') {
+      const voter = url.searchParams.get('voter') || '';
+      return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status, (SELECT COUNT(*) FROM feedback_votes WHERE report_id = reports.id) AS votes, EXISTS(SELECT 1 FROM feedback_votes WHERE report_id = reports.id AND voter = ?) AS voted FROM reports JOIN public_reports ON reports.id = public_reports.report_id LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 100`, voter).toArray() });
+    }
     if (url.pathname === '/reports' && request.method === 'GET') return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status FROM reports LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 500`).toArray() });
     if (url.pathname === '/reports' && request.method === 'POST') {
       const { message, key, type } = await request.json(); const now = Date.now();
