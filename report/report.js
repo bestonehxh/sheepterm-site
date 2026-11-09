@@ -1,6 +1,6 @@
 (function(){
   var form=document.getElementById('report-form'), status=document.getElementById('report-status'), list=document.getElementById('reports-list'), note=document.getElementById('reports-status'), sort=document.getElementById('sort'), filter='feature', reports=[];
-  var labels={open:'Open','under-review':'Under review',planned:'Planned','in-progress':'In progress',completed:'Completed',closed:'Closed'};
+  var labels={open:'Open','under-review':'Under review',planned:'Planned','in-progress':'Under development',completed:'Completed',closed:'Closed'};
   var signedIn=false, account=document.getElementById('account'), share=document.getElementById('share'), openForm=document.getElementById('open-form'), cancelForm=document.getElementById('cancel-form');
   openForm.addEventListener('click',function(){if(!signedIn){note.replaceChildren('Sign in with Google to post feedback. ');var a=document.createElement('a');a.href='/auth/google';a.textContent='Sign in';note.append(a);return}form.elements.type.value=filter;share.hidden=false;openForm.setAttribute('aria-expanded','true');document.getElementById('message').focus()});
   cancelForm.addEventListener('click',function(){share.hidden=true;openForm.setAttribute('aria-expanded','false');openForm.focus()});
