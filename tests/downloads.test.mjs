@@ -288,3 +288,19 @@ test('Google sign-in checks state, creates a session, and logs out', async () =>
     assert.equal((await (await worker.fetch(req('/api/community-session', {headers:{Cookie:cookie}}), env, ctx)).json()).signedIn, false);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('only the signed-in owner can edit feedback and publish a reply', async () => {
+  const count = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const env = { STATS_PASSWORD_SHA256: createHash('sha256').update('secret').digest('hex'), DOWNLOADS: { idFromName: x => x, get: () => ({ fetch: (url, options) => count.fetch(new Request(url, options)) }) } };
+  const ctx = {waitUntil() {}}, req = (path, options) => new Request('https://sheepterm.com' + path, options);
+  count.sql.exec("INSERT INTO reports (created_at, message) VALUES ('2026-11-09', 'Original')");
+  count.sql.exec('INSERT INTO public_reports VALUES (1)');
+  const edit = (cookie, payload) => worker.fetch(req('/api/feedback-edit', { method:'POST', headers:{ Origin:'https://sheepterm.com', 'Content-Type':'application/json', Cookie:cookie }, body:JSON.stringify(payload) }), env, ctx);
+  assert.equal((await edit('', {id:1,message:'Edited',reply:'We are looking into it.'})).status, 403);
+  const login=await worker.fetch(req('/download-stats/login',{method:'POST',headers:{Origin:'https://sheepterm.com','Content-Type':'application/x-www-form-urlencoded'},body:'password=secret'}),env,ctx);
+  const cookie=login.headers.get('Set-Cookie').split(';')[0];
+  assert.equal((await edit(cookie,{id:1,message:'Edited',reply:'We are looking into it.'})).status,200);
+  const reports=(await (await worker.fetch(req('/api/public-reports'),env,ctx)).json()).reports;
+  assert.equal(reports[0].message,'Edited'); assert.equal(reports[0].reply,'We are looking into it.');
+  assert.equal((await edit(cookie,{id:1,message:' ',reply:'x'})).status,400);
+});

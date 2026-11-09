@@ -149,6 +149,15 @@ export default {
         return await counter(env).fetch('https://counter/vote', { method: 'POST', body: JSON.stringify(input) });
       } catch { return json({ error: 'Unable to vote' }, 400); }
     }
+    if (url.pathname === '/api/feedback-edit') {
+      if (request.method !== 'POST' || request.headers.get('Origin') !== url.origin || !await authorized(request, env)) return json({ error: 'Forbidden' }, 403);
+      if (!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type') || '')) return json({ error: 'Invalid content type' }, 415);
+      try {
+        const input = await request.json();
+        if (!Number.isSafeInteger(input.id) || input.id < 1 || typeof input.message !== 'string' || !input.message.trim() || input.message.length > 3000 || typeof input.reply !== 'string' || input.reply.length > 3000) return json({ error: 'Invalid feedback' }, 400);
+        return await counter(env).fetch('https://counter/feedback-edit', { method: 'POST', body: JSON.stringify({ id: input.id, message: input.message.trim(), reply: input.reply.trim() }) });
+      } catch { return json({ error: 'Unable to save changes' }, 400); }
+    }
     if (url.pathname === '/api/feedback-status') {
       if (request.method !== 'POST' || request.headers.get('Origin') !== url.origin || !await authorized(request, env)) return json({ error: 'Forbidden' }, 403);
       try {
@@ -263,6 +272,7 @@ export class DownloadCounter {
     this.sql.exec("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, message TEXT NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS public_reports (report_id INTEGER PRIMARY KEY)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS feedback_details (report_id INTEGER PRIMARY KEY, type TEXT NOT NULL DEFAULT 'bug', status TEXT NOT NULL DEFAULT 'open')");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS feedback_replies (report_id INTEGER PRIMARY KEY, message TEXT NOT NULL, updated_at TEXT NOT NULL)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS feedback_votes (report_id INTEGER NOT NULL, voter TEXT NOT NULL, PRIMARY KEY(report_id, voter))");
     this.sql.exec("CREATE TABLE IF NOT EXISTS report_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)");
     this.sql.exec("INSERT OR IGNORE INTO metadata VALUES ('started_at', ?)", new Date().toISOString());
@@ -314,9 +324,9 @@ export class DownloadCounter {
     }
     if (url.pathname === '/public-reports' && request.method === 'GET') {
       const voter = url.searchParams.get('voter') || '';
-      return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status, (SELECT COUNT(*) FROM feedback_votes WHERE report_id = reports.id) AS votes, EXISTS(SELECT 1 FROM feedback_votes WHERE report_id = reports.id AND voter = ?) AS voted FROM reports JOIN public_reports ON reports.id = public_reports.report_id LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 100`, voter).toArray() });
+      return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status, (SELECT COUNT(*) FROM feedback_votes WHERE report_id = reports.id) AS votes, COALESCE((SELECT message FROM feedback_replies WHERE report_id = reports.id), '') AS reply, EXISTS(SELECT 1 FROM feedback_votes WHERE report_id = reports.id AND voter = ?) AS voted FROM reports JOIN public_reports ON reports.id = public_reports.report_id LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 100`, voter).toArray() });
     }
-    if (url.pathname === '/reports' && request.method === 'GET') return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status FROM reports LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 500`).toArray() });
+    if (url.pathname === '/reports' && request.method === 'GET') return json({ reports: this.sql.exec(`SELECT reports.id, created_at, message, COALESCE(feedback_details.type, 'bug') AS type, COALESCE(feedback_details.status, 'open') AS status, COALESCE((SELECT message FROM feedback_replies WHERE report_id = reports.id), '') AS reply FROM reports LEFT JOIN feedback_details ON reports.id = feedback_details.report_id ORDER BY reports.id DESC LIMIT 500`).toArray() });
     if (url.pathname === '/reports' && request.method === 'POST') {
       const { message, key, type } = await request.json(); const now = Date.now();
       this.sql.exec('DELETE FROM report_limits WHERE expires < ?', now);
@@ -342,6 +352,14 @@ export class DownloadCounter {
       else this.sql.exec('INSERT INTO feedback_votes (report_id, voter) VALUES (?, ?)', id, voter);
       const votes = this.sql.exec('SELECT COUNT(*) AS count FROM feedback_votes WHERE report_id = ?', id).one().count;
       return json({ votes, voted: !exists });
+    }
+    if (url.pathname === '/feedback-edit' && request.method === 'POST') {
+      const { id, message, reply } = await request.json();
+      if (!this.sql.exec('SELECT id FROM reports WHERE id = ?', id).toArray().length) return json({ error: 'Not found' }, 404);
+      this.sql.exec('UPDATE reports SET message = ? WHERE id = ?', message, id);
+      if (reply) this.sql.exec('INSERT INTO feedback_replies (report_id, message, updated_at) VALUES (?, ?, ?) ON CONFLICT(report_id) DO UPDATE SET message = excluded.message, updated_at = excluded.updated_at', id, reply, new Date().toISOString());
+      else this.sql.exec('DELETE FROM feedback_replies WHERE report_id = ?', id);
+      return json({ ok: true });
     }
     if (url.pathname === '/status' && request.method === 'POST') {
       const { id, status } = await request.json();
