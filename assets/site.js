@@ -30,11 +30,13 @@ function human(t){var m=/^v?(\d+(?:\.\d+)*)-(\d+)$/.exec(t||"");return m?m[1]+" 
 function mb(n){return(n/1048576).toFixed(n<10485760?1:0)+" MB"}
 var cache={};
 function release(repo){
- if(cache[repo])return cache[repo];
- return cache[repo]=new Promise(function(res,rej){
+ var hit=cache[repo];
+ if(hit&&Date.now()-hit.ts<600000)return hit.p;
+ var p=new Promise(function(res,rej){
   fetch(API+repo+"/releases/latest",{headers:{Accept:"application/vnd.github+json"}}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
    if(!(j.assets||[]).length)throw 0;
-   res({v:human(j.tag_name),tag:j.tag_name,assets:j.assets})}).catch(rej)})}
+   res({v:human(j.tag_name),tag:j.tag_name,assets:j.assets})}).catch(function(e){delete cache[repo];rej(e)})});
+ cache[repo]={p:p,ts:Date.now()};return p}
 // the asset a button means: its data-asset pattern (Linux: AppImage preferred for each architecture), else the release's
 // disk image (Mac, drag-to-install: a zip unpacked twice became "App 2.app" beside the old copy), else its zip
 function pick(r,pat){var a=null;(pat?[pat]:["\\.dmg$","\\.zip$"]).some(function(p){var re=new RegExp(p,"i");
