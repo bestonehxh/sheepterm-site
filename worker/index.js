@@ -234,7 +234,10 @@ export default {
     const isBot = /bot|crawler|spider|headless|curl|wget|python|preview|facebookexternalhit/i.test(request.headers.get("User-Agent") || "") || request.cf?.botManagement?.verifiedBot;
     const prefetch = /prefetch|prerender/i.test((request.headers.get("Purpose") || "") + (request.headers.get("Sec-Purpose") || ""));
     const privacyOptOut = request.headers.get("Sec-GPC") === "1" || request.headers.get("DNT") === "1";
-    const tracked = !!asset && request.method === "GET" && !isBot && !prefetch && !privacyOptOut;
+    // Every browser sends Accept-Language on a navigation; scanners that borrow a browser's User-Agent usually do not
+    // (2026-11-24: a London data-centre scanner, Chrome/117 UA, five headers, all 12 links in 20 ms).
+    const noLanguage = !request.headers.get("Accept-Language");
+    const tracked = !!asset && request.method === "GET" && !isBot && !noLanguage && !prefetch && !privacyOptOut;
     if (tracked) {
       const referrer = refHost(url.searchParams.get("ref") || request.headers.get("Referer"));
       const event = {
@@ -257,6 +260,8 @@ export default {
     } });
   }
 };
+
+const BURST_MS = 5000;
 
 export class DownloadCounter {
   constructor(ctx) {
@@ -372,11 +377,18 @@ export class DownloadCounter {
     if (url.pathname === "/record" && request.method === "POST") {
       const e = await request.json();
       const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+      // Resolve the code before any write: no await between the burst check and the inserts, so two requests of one
+      // burst cannot both pass the check.
+      const visitor = await this.visitor(e.fp), now = Date.now();
+      // A person picks one download; a visitor taking a DIFFERENT platform within BURST_MS is automation going
+      // through every link. Only the first of such a burst is counted.
+      if (visitor && !e.test && this.sql.exec("SELECT 1 FROM events WHERE visitor = ? AND platform != ? AND ts >= ? LIMIT 1",
+        visitor, e.platform, new Date(now - BURST_MS).toISOString()).toArray().length) return json({ ok: true, counted: false });
       this.sql.exec(`INSERT INTO counts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(day, platform, version, source, medium, campaign, placement, country, test)
         DO UPDATE SET count = count + 1`, day, e.platform, e.version, e.source, e.medium, e.campaign, e.placement, e.country, e.test ? 1 : 0);
       this.sql.exec("INSERT INTO events (ts, day, platform, version, source, placement, country, visitor, test) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        new Date().toISOString(), day, e.platform, e.version, e.source, e.placement, e.country, await this.visitor(e.fp), e.test ? 1 : 0);
+        new Date(now).toISOString(), day, e.platform, e.version, e.source, e.placement, e.country, visitor, e.test ? 1 : 0);
       // Bound storage to 90 calendar days. No address, browser string or digest of them is stored, only the visitor code.
       this.sql.exec("DELETE FROM counts WHERE day < date(?, '-89 days')", day);
       this.sql.exec("DELETE FROM events WHERE day < date(?, '-89 days')", day);

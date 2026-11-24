@@ -33,7 +33,7 @@ test('redirects validate targets, preserve attribution, and exclude non-download
   const ctx = { waitUntil: p => pending.push(p) };
   globalThis.fetch = async () => Response.json({ tag_name: 'v6.0-13', assets: [{ name: 'SheepTerm.dmg', browser_download_url: 'https://github.com/bestonehxh/SheepTerm/releases/download/v6.0-13/SheepTerm.dmg' }] });
   const make = (path, method = 'GET', extra = {}) => {
-    const req = new Request('https://sheepterm.com' + path, { method, headers: { 'User-Agent': 'Mozilla/5.0 Safari', ...extra } });
+    const req = new Request('https://sheepterm.com' + path, { method, headers: { 'User-Agent': 'Mozilla/5.0 Safari', 'Accept-Language': 'en-GB', ...extra } });
     Object.defineProperty(req, 'cf', { value: { country: 'BR' } }); return req;
   };
   try {
@@ -44,7 +44,7 @@ test('redirects validate targets, preserve attribution, and exclude non-download
     assert.equal(recorded.length, 1);
     assert.equal(recorded[0].source, 'reddit'); assert.equal(recorded[0].country, 'BR');
     assert.equal('ip' in recorded[0], false);
-    for (const [method, headers] of [['HEAD', {}], ['GET', { 'DNT': '1' }], ['GET', { 'Sec-GPC': '1' }], ['GET', { 'Purpose': 'prefetch' }], ['GET', { 'User-Agent': 'curl/8' }]]) {
+    for (const [method, headers] of [['HEAD', {}], ['GET', { 'DNT': '1' }], ['GET', { 'Sec-GPC': '1' }], ['GET', { 'Purpose': 'prefetch' }], ['GET', { 'User-Agent': 'curl/8' }], ['GET', { 'Accept-Language': '' }]]) {
       const result = await worker.fetch(make('/download/mac', method, headers), env, ctx);
       assert.equal(result.status, 302); assert.equal(result.headers.get('X-Download-Tracking'), 'excluded');
     }
@@ -170,7 +170,7 @@ test('each counted download keeps its time and a 30-day visitor code, never the 
   const record = (e) => counter.fetch(new Request('https://counter/record', { method: 'POST', body: JSON.stringify(e) }));
   const base = { platform: 'mac', version: 'v6.0-18', source: 'direct', medium: 'none', campaign: 'none', placement: 'hero', country: 'TH', test: false };
   await record({ ...base, fp: fp(ip + '\n' + ua) });
-  await record({ ...base, fp: fp(ip + '\n' + ua), platform: 'windows' });
+  await record({ ...base, fp: fp(ip + '\n' + ua), version: 'v6.0-17' });   // same platform again: not a burst
   await record({ ...base, fp: fp('203.0.113.9\n' + ua) });
   await record({ ...base, fp: 'not-a-digest' });
   await record({ ...base, fp: fp(ip + '\n' + ua), test: true });
@@ -316,4 +316,37 @@ test('feature requests move to review above 20 votes without overriding later st
   assert.equal((await vote('user20')).status,'under-review');
   count.sql.exec("UPDATE feedback_details SET status = 'planned' WHERE report_id = 1");
   assert.equal((await vote('user21')).status,'planned');
+});
+
+test('one visitor taking several platforms within seconds counts once (scanner going through every link)', async () => {
+  const counter = new DownloadCounter({ storage: { sql: sqlStore() } });
+  const fp = v => createHash('sha256').update(v).digest('hex');
+  const scanner = fp('5.102.169.100\nMozilla/5.0 (Windows NT 10.0) Chrome/117'), person = fp('198.51.100.7\nMozilla/5.0 Safari');
+  const base = { version: 'v2.1-3', source: 'direct', medium: 'none', campaign: 'none', placement: 'link', country: 'GB', test: false };
+  const platforms = ['linux-deb', 'linux-tar', 'linux-appimage', 'windows', 'mac', 'linux-arm64-tar', 'linux-rpm', 'linux-arm64-deb', 'linux', 'linux-arm64', 'linux-arm64-rpm', 'linux-arm64-appimage'];
+  const realNow = Date.now; let clock = Date.parse('2026-11-24T09:02:41.516Z');
+  Date.now = () => clock;
+  const record = async (e) => (await counter.fetch(new Request('https://counter/record', { method: 'POST', body: JSON.stringify(e) }))).json();
+  try {
+    // all twelve links in 20 ms, as on 2026-11-24: only the first is counted
+    const results = [];
+    for (const platform of platforms) { results.push(await record({ ...base, platform, fp: scanner })); clock += 2; }
+    assert.deepEqual(results.map(r => r.counted !== false), [true, ...Array(11).fill(false)]);
+    // another visitor in the same instant is unaffected
+    assert.notEqual((await record({ ...base, platform: 'mac', fp: person })).counted, false);
+    // the same platform again (a retry) is still a download
+    assert.notEqual((await record({ ...base, platform: 'mac', fp: person })).counted, false);
+    // a test request never trips the rule, and is never counted in the report anyway
+    assert.notEqual((await record({ ...base, platform: 'windows', fp: person, test: true })).counted, false);
+    // a different platform after the window is a new download
+    clock += 5001;
+    assert.notEqual((await record({ ...base, platform: 'windows', fp: person })).counted, false);
+    // a skipped request leaves no row: the burst did not extend the scanner's window
+    clock += 1;
+    assert.notEqual((await record({ ...base, platform: 'windows', fp: scanner })).counted, false);
+    const report = await (await counter.fetch(new Request('https://counter/stats?days=7'))).json();
+    assert.equal(report.total, 5);
+    assert.equal(report.recent.length, 5);
+    assert.equal(counter.sql.exec('SELECT SUM(count) AS n FROM counts WHERE test = 0').one().n, 5);
+  } finally { Date.now = realNow; }
 });
